@@ -19,16 +19,12 @@ default:
   timeout: 2h
 
 variables:
-  VLLM_API_URL:    "http://ai-server.internal:8000"
-  VLLM_MODEL_NAME: "codestral-22b"
-  TARGET_LABEL:    "ai-fix"
-  BRANCH_PREFIX:   "ai/ralph"
-  # charfeng1 loop settings — max iterations before the plugin gives up
+  VLLM_API_URL:         "http://ai-server.internal:8000"
+  VLLM_MODEL_NAME:      "codestral-22b"
+  TARGET_LABEL:         "ai-fix"
+  BRANCH_PREFIX:        "ai/ralph"
   RALPH_MAX_ITERATIONS: "12"
 
-##############################################################################
-# JOB
-##############################################################################
 nightly-ralph:
   stage: autonomous-development
 
@@ -43,16 +39,17 @@ nightly-ralph:
     expire_in: 30 days
 
   script:
-    # ── 0. Setup ─────────────────────────────────────────────────────────────
     - |
+      set -euo pipefail
+
+      # ── 0. Setup ────────────────────────────────────────────────────────────
       git config --global user.email "ralph-bot@${CI_SERVER_HOST}"
       git config --global user.name  "Ralph Autonomous Worker"
       git remote set-url origin \
         "https://oauth2:${PROJECT_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       mkdir -p ralph-artifacts
 
-    # ── 1. Fetch open issues ──────────────────────────────────────────────────
-    - |
+      # ── 1. Fetch open issues ─────────────────────────────────────────────────
       echo "==> Fetching issues labelled '${TARGET_LABEL}' ..."
       ISSUES_JSON=$(curl -fsSL \
         --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
@@ -61,13 +58,12 @@ nightly-ralph:
       echo "    Found ${ISSUE_COUNT} issue(s)"
       [[ "${ISSUE_COUNT}" -eq 0 ]] && echo "==> Nothing to do." && exit 0
 
-    # ── 2. Per-issue loop ─────────────────────────────────────────────────────
-    - |
+      # ── 2. Per-issue loop ────────────────────────────────────────────────────
       echo "${ISSUES_JSON}" | jq -c '.[]' | while IFS= read -r ISSUE; do
+
         IID=$(   echo "${ISSUE}" | jq -r '.iid')
         TITLE=$( echo "${ISSUE}" | jq -r '.title')
-        BODY=$(  echo "${ISSUE}" | jq -r '.description // "No description provided."' \
-                   | sed 's/`/\\`/g; s/\$/\\$/g')
+        BODY=$(  echo "${ISSUE}" | jq -r '.description // "No description provided."')
         ISSUE_URL="${CI_PROJECT_URL}/-/issues/${IID}"
 
         SAFE_TITLE=$(echo "${TITLE}" \
@@ -82,93 +78,75 @@ nightly-ralph:
         echo "════════════════════════════════════════════════"
         echo " ISSUE #${IID}: ${TITLE}"
         echo " BRANCH   : ${BRANCH}"
-        echo " ARTIFACTS: ${ARTIFACT_DIR}/"
         echo "════════════════════════════════════════════════"
 
-        # ── 2a. Branch setup ───────────────────────────────────────────────
+        # ── 2a. Branch setup ─────────────────────────────────────────────────
         git fetch origin main --quiet
         git checkout main --quiet
         git pull origin main --quiet
 
         if git ls-remote --exit-code --heads origin "${BRANCH}" > /dev/null 2>&1; then
           echo "WARN: Branch '${BRANCH}' already exists — skipping"
-          echo "STATUS: SKIP branch_exists" > "${ARTIFACT_DIR}/result.txt"
+          printf 'STATUS: SKIP branch_exists\n' > "${ARTIFACT_DIR}/result.txt"
           continue
         fi
 
         git checkout -b "${BRANCH}"
-
-        # ── 2b. Write charfeng1 loop state file ───────────────────────────
-        # The charfeng1 plugin reads .opencode/ralph-loop.local.md to know
-        # if a loop is active. Pre-creating it activates the plugin loop so
-        # it re-prompts on session.idle without needing /ralph-loop command.
-        # The PROMPT section becomes the task for each iteration.
         mkdir -p .opencode
 
-        LOOP_PROMPT="Fix GitLab issue #${IID}: ${TITLE}
+        # ── 2b. Build the loop prompt ────────────────────────────────────────
+        # Using $'\n' and printf to avoid multi-line bash strings that break
+        # YAML parsing when lines contain colons at low indentation.
+        PROMPT="Fix GitLab issue #${IID}: ${TITLE}"
+        PROMPT+=$'\n\n'
+        PROMPT+="ISSUE DESCRIPTION:"$'\n'
+        PROMPT+="${BODY}"$'\n\n'
+        PROMPT+="WORKFLOW:"$'\n'
+        PROMPT+="1. Explore the codebase to understand the root cause"$'\n'
+        PROMPT+="2. Write .opencode/ralph/plans/issue-${IID}.md with root cause,"$'\n'
+        PROMPT+="   affected files, verification strategy, and implementation steps"$'\n'
+        PROMPT+="3. Write the verification artifact BEFORE touching source code"$'\n'
+        PROMPT+="4. Confirm verification FAILS on the baseline"$'\n'
+        PROMPT+="5. Implement the fix"$'\n'
+        PROMPT+="6. Run verification and confirm it passes"$'\n'
+        PROMPT+="7. Run git diff --stat to confirm only expected files changed"$'\n\n'
+        PROMPT+="CONSTRAINTS:"$'\n'
+        PROMPT+="- Never touch .env files, secrets, or credentials"$'\n'
+        PROMPT+="- Never run git commit, git push, git checkout, or git reset"$'\n'
+        PROMPT+="- Never install packages (npm install, pip install, etc.)"$'\n'
+        PROMPT+="- Never modify verification artifacts after writing them"$'\n\n'
+        PROMPT+="When fully fixed and verified, output EXACTLY:"$'\n'
+        PROMPT+='<promise>DONE'$'\n'
+        PROMPT+='summary: <two sentences: what was wrong and what was changed>'$'\n'
+        PROMPT+='root_cause: <file:line>'$'\n'
+        PROMPT+='files_changed: <comma-separated paths>'$'\n'
+        PROMPT+='verification: <command and result>'$'\n'
+        PROMPT+='</promise>'$'\n\n'
+        PROMPT+="When genuinely blocked, output EXACTLY:"$'\n'
+        PROMPT+='<promise>BLOCKED'$'\n'
+        PROMPT+='reason: <one sentence — specific file/line/error>'$'\n'
+        PROMPT+='recommendation: <what a human should do next>'$'\n'
+        PROMPT+='</promise>'$'\n\n'
+        PROMPT+="Output the promise ONLY when verification actually passes."$'\n'
+        PROMPT+="False promises are not allowed."
 
-ISSUE DESCRIPTION:
-${BODY}
-
-WORKFLOW:
-1. Explore the codebase to understand the root cause
-2. Write .opencode/ralph/plans/issue-${IID}.md with:
-   - Root cause (file:line)
-   - Affected files and why
-   - Verification strategy (unit test, smoke script, or regression guard)
-   - Implementation steps
-3. Write the verification artifact BEFORE touching source code
-4. Confirm verification FAILS on the baseline
-5. Implement the fix
-6. Run verification — confirm it passes
-7. Run git diff --stat to confirm only expected files changed
-
-CONSTRAINTS:
-- Never touch .env files, secrets, or credentials
-- Never run git commit, git push, git checkout, or git reset
-- Never install packages (npm install, pip install, etc.)
-- Never modify verification artifacts after writing them
-
-COMPLETION SIGNALS (output EXACTLY one when done):
-
-When fully fixed and verified:
-<promise>DONE
-summary: <two sentences: what was wrong and what was changed>
-root_cause: <file:line — specific>
-files_changed: <comma-separated paths>
-verification: <command and result e.g. 'pytest tests/test_fix.py — 3 passed'>
-</promise>
-
-When genuinely blocked:
-<promise>BLOCKED
-reason: <one sentence — specific file/line/error>
-recommendation: <what a human should do next>
-</promise>
-
-Output the promise ONLY when verification actually passes.
-False promises are not allowed."
-
-        cat > .opencode/ralph-loop.local.md <<LOOPSTATE
----
-active: true
-iteration: 1
-maxIterations: ${RALPH_MAX_ITERATIONS}
-sessionId:
----
-${LOOP_PROMPT}
-LOOPSTATE
+        # ── 2c. Write charfeng1 loop state file ─────────────────────────────
+        printf '%s\n' \
+          '---' \
+          'active: true' \
+          'iteration: 1' \
+          "maxIterations: ${RALPH_MAX_ITERATIONS}" \
+          'sessionId:' \
+          '---' \
+          "${PROMPT}" > .opencode/ralph-loop.local.md
 
         echo "    Loop state file written (.opencode/ralph-loop.local.md)"
 
-        # ── 2c. Invoke OpenCode with the charfeng1 plugin ─────────────────
-        # --dangerously-skip-permissions: auto-approves non-denied prompts
-        #   (required for unattended CI — no human to click "Allow")
-        # The charfeng1 plugin intercepts session.idle and re-prompts until
-        # <promise>DONE</promise> or max iterations reached.
-        echo "==> Starting opencode with ralph-loop plugin ..."
+        # ── 2d. Invoke OpenCode ──────────────────────────────────────────────
+        echo "==> Starting opencode ..."
         set +e
         opencode run \
-          "${LOOP_PROMPT}" \
+          "${PROMPT}" \
           --dangerously-skip-permissions \
           --log-level DEBUG \
           --print-logs \
@@ -176,166 +154,75 @@ LOOPSTATE
         OPENCODE_EXIT=${PIPESTATUS[0]}
         set -e
 
-        # ── 2d. Export session trace ───────────────────────────────────────
-        echo "==> Exporting session trace ..."
+        # ── 2e. Export session trace ─────────────────────────────────────────
         SESSION_ID=$(opencode session list --format json -n 1 2>/dev/null \
           | jq -r '.[0].id // empty' || true)
         if [[ -n "${SESSION_ID}" ]]; then
-          opencode session export "${SESSION_ID}" \
-            > "${ARTIFACT_DIR}/trace.json" 2>/dev/null || true
-          opencode session stats "${SESSION_ID}" \
-            > "${ARTIFACT_DIR}/stats.txt"  2>/dev/null || true
-          echo "    Session: ${SESSION_ID}"
+          opencode session export "${SESSION_ID}" > "${ARTIFACT_DIR}/trace.json" 2>/dev/null || true
+          opencode session stats  "${SESSION_ID}" > "${ARTIFACT_DIR}/stats.txt"  2>/dev/null || true
         else
           echo "{}" > "${ARTIFACT_DIR}/trace.json"
         fi
 
-        # ── 2e. Collect git artifacts ──────────────────────────────────────
-        git diff   main...HEAD          > "${ARTIFACT_DIR}/changes.diff" 2>/dev/null || true
-        git diff   main...HEAD --stat   > "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || true
-        git log    main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt" 2>/dev/null || true
-        [[ -f ".opencode/ralph/plans/issue-${IID}.md" ]] \
-          && cp ".opencode/ralph/plans/issue-${IID}.md" "${ARTIFACT_DIR}/plan.md" || true
+        # ── 2f. Collect git artifacts ────────────────────────────────────────
+        git diff  main...HEAD         > "${ARTIFACT_DIR}/changes.diff" 2>/dev/null || true
+        git diff  main...HEAD --stat  > "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || true
+        git log   main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt" 2>/dev/null || true
+        PLAN_PATH=".opencode/ralph/plans/issue-${IID}.md"
+        [[ -f "${PLAN_PATH}" ]] && cp "${PLAN_PATH}" "${ARTIFACT_DIR}/plan.md" || true
 
-        # Clean up loop state file — don't commit it
         rm -f .opencode/ralph-loop.local.md
 
-        # ── 2f. Signal detection ───────────────────────────────────────────
+        # ── 2g. Signal detection ─────────────────────────────────────────────
         LOG="${ARTIFACT_DIR}/agent.log"
 
         if grep -q '<promise>DONE' "${LOG}"; then
           echo "==> DONE signal detected"
 
-          # Parse the structured fields from inside the promise block
           DONE_BLOCK=$(awk '/<promise>DONE/,/<\/promise>/' "${LOG}")
-          SUMMARY=$(     echo "${DONE_BLOCK}" | grep '^summary:'     | head -1 | sed 's/^summary: //')
-          ROOT_CAUSE=$(  echo "${DONE_BLOCK}" | grep '^root_cause:'  | head -1 | sed 's/^root_cause: //')
-          FILES=$(       echo "${DONE_BLOCK}" | grep '^files_changed:'| head -1 | sed 's/^files_changed: //')
-          VERIFICATION=$(echo "${DONE_BLOCK}" | grep '^verification:' | head -1 | sed 's/^verification: //')
-
-          # Ground truth from git
+          SUMMARY=$(     echo "${DONE_BLOCK}" | grep '^summary:'      | head -1 | sed 's/^summary: //')
+          ROOT_CAUSE=$(  echo "${DONE_BLOCK}" | grep '^root_cause:'   | head -1 | sed 's/^root_cause: //')
+          FILES=$(       echo "${DONE_BLOCK}" | grep '^files_changed:' | head -1 | sed 's/^files_changed: //')
+          VERIFICATION=$(echo "${DONE_BLOCK}" | grep '^verification:'  | head -1 | sed 's/^verification: //')
           GIT_STAT=$(cat "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || echo "No changes recorded")
-          PLAN_CONTENT=$(cat "${ARTIFACT_DIR}/plan.md"  2>/dev/null \
-            || echo "*Plan file not written — see agent.log artifact.*")
+          PLAN_CONTENT=$(cat "${ARTIFACT_DIR}/plan.md" 2>/dev/null || echo "Plan file not written.")
           AGENT_LOG_TAIL=$(tail -80 "${LOG}")
 
-          cat > "${ARTIFACT_DIR}/result.txt" <<RESULT
-STATUS:   DONE
-ISSUE:    #${IID} — ${TITLE}
-BRANCH:   ${BRANCH}
-VERIFY:   ${VERIFICATION}
-FILES:    ${FILES}
-SUMMARY:  ${SUMMARY}
-RESULT
+          printf 'STATUS:   DONE\nISSUE:    #%s - %s\nBRANCH:   %s\nVERIFY:   %s\nFILES:    %s\nSUMMARY:  %s\n' \
+            "${IID}" "${TITLE}" "${BRANCH}" "${VERIFICATION}" "${FILES}" "${SUMMARY}" \
+            > "${ARTIFACT_DIR}/result.txt"
 
-          # ── Commit ────────────────────────────────────────────────────
+          # ── Commit ──────────────────────────────────────────────────────
           git add --all
-          # Remove loop state file from staging if accidentally added
           git restore --staged .opencode/ralph-loop.local.md 2>/dev/null || true
 
           if git diff --cached --quiet; then
-            echo "WARN: Staged diff is empty despite DONE signal — skipping MR"
-            echo "STATUS: SKIP empty_diff" >> "${ARTIFACT_DIR}/result.txt"
+            echo "WARN: Empty diff despite DONE signal — skipping MR"
+            printf 'STATUS: SKIP empty_diff\n' >> "${ARTIFACT_DIR}/result.txt"
             git checkout main --quiet
             git branch -D "${BRANCH}"
             continue
           fi
 
-          git commit -m "fix(#${IID}): ${TITLE}
-
-${SUMMARY}
-
-Verification : ${VERIFICATION}
-Files changed : ${FILES}
-
-Closes #${IID}"
-
+          git commit -m "fix(#${IID}): ${TITLE}"$'\n\n'"${SUMMARY}"$'\n\n'"Closes #${IID}"
           git push origin "${BRANCH}"
 
-          # ── Build MR description ───────────────────────────────────────
-          MR_DESCRIPTION=$(cat <<MRDESC
-## 🤖 Ralph — Autonomous Fix
-
-> **Issue**: [#${IID} — ${TITLE}](${ISSUE_URL})
-> **Branch**: \`${BRANCH}\`
-> **CI Job**: [#${CI_JOB_ID}](${CI_JOB_URL})
-> **Loop engine**: [charfeng1/opencode-ralph-loop](https://github.com/charfeng1/opencode-ralph-loop)
-
----
-
-### 🔍 Root Cause
-
-${ROOT_CAUSE}
-
----
-
-### 📋 Summary
-
-${SUMMARY}
-
----
-
-### ✅ Verification
-
-| | |
-|---|---|
-| **Command & result** | \`${VERIFICATION}\` |
-
----
-
-### 📁 Changes
-
-\`\`\`
-${GIT_STAT}
-\`\`\`
-
-${FILES:+**Files** (from agent): ${FILES}}
-
----
-
-### 🗺 Implementation Plan
-
-<details>
-<summary>Expand plan</summary>
-
-${PLAN_CONTENT}
-
-</details>
-
----
-
-### 🪵 Agent Log (last 80 lines)
-
-<details>
-<summary>Expand log</summary>
-
-\`\`\`
-${AGENT_LOG_TAIL}
-\`\`\`
-
-</details>
-
----
-
-### 📦 Artifacts
-
-Attached to [CI job #${CI_JOB_ID}](${CI_JOB_URL}) under \`ralph-artifacts/issue-${IID}/\`:
-
-| File | Contents |
-|---|---|
-| \`agent.log\` | Full OpenCode output + DEBUG logs |
-| \`trace.json\` | Complete session trace (tool calls, tokens, timing) |
-| \`stats.txt\` | Token usage and cost summary |
-| \`changes.diff\` | Full \`git diff\` |
-| \`changes.stat\` | \`git diff --stat\` |
-| \`plan.md\` | Ralph's implementation plan |
-| \`result.txt\` | Machine-readable result summary |
-
----
-
-Closes #${IID}
-MRDESC
-)
+          # ── MR description ───────────────────────────────────────────────
+          MR_DESC="## Ralph — Autonomous Fix"
+          MR_DESC+=$'\n\n'"**Issue**: [#${IID} — ${TITLE}](${ISSUE_URL})"
+          MR_DESC+=$'\n'"**Branch**: \`${BRANCH}\`"
+          MR_DESC+=$'\n'"**CI Job**: [#${CI_JOB_ID}](${CI_JOB_URL})"
+          MR_DESC+=$'\n'"**Plugin**: [charfeng1/opencode-ralph-loop](https://github.com/charfeng1/opencode-ralph-loop)"
+          MR_DESC+=$'\n\n---'
+          MR_DESC+=$'\n\n'"### Root Cause"$'\n\n'"${ROOT_CAUSE}"
+          MR_DESC+=$'\n\n'"### Summary"$'\n\n'"${SUMMARY}"
+          MR_DESC+=$'\n\n'"### Verification"$'\n\n'"\`${VERIFICATION}\`"
+          MR_DESC+=$'\n\n'"### Changes"$'\n\n''```'$'\n'"${GIT_STAT}"$'\n''```'
+          MR_DESC+=$'\n\n'"### Implementation Plan"$'\n\n''<details><summary>Expand</summary>'$'\n\n'"${PLAN_CONTENT}"$'\n\n''</details>'
+          MR_DESC+=$'\n\n'"### Agent Log"$'\n\n''<details><summary>Expand (last 80 lines)</summary>'$'\n\n''```'$'\n'"${AGENT_LOG_TAIL}"$'\n''```'$'\n\n''</details>'
+          MR_DESC+=$'\n\n'"### Artifacts"
+          MR_DESC+=$'\n'"Attached to [CI job #${CI_JOB_ID}](${CI_JOB_URL}) under \`ralph-artifacts/issue-${IID}/\`."
+          MR_DESC+=$'\n\n'"Closes #${IID}"
 
           MR_RESPONSE=$(curl -fsSL --request POST \
             --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
@@ -343,22 +230,14 @@ MRDESC
             --data "$(jq -n \
               --arg src   "${BRANCH}" \
               --arg title "fix(#${IID}): ${TITLE}" \
-              --arg desc  "${MR_DESCRIPTION}" \
-              '{
-                source_branch: $src,
-                target_branch: "main",
-                title: $title,
-                description: $desc,
-                remove_source_branch: true,
-                squash: false,
-                labels: "ai-generated"
-              }')" \
+              --arg desc  "${MR_DESC}" \
+              '{source_branch:$src,target_branch:"main",title:$title,description:$desc,remove_source_branch:true,squash:false,labels:"ai-generated"}')" \
             "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests")
 
           MR_URL=$(echo "${MR_RESPONSE}" | jq -r '.web_url // "unknown"')
-          MR_IID=$(echo "${MR_RESPONSE}" | jq -r '.iid    // "?"')
+          MR_IID=$(echo "${MR_RESPONSE}" | jq -r '.iid // "?"')
           echo "    MR created: ${MR_URL}"
-          echo "MR: !${MR_IID} — ${MR_URL}" >> "${ARTIFACT_DIR}/result.txt"
+          printf 'MR: !%s - %s\n' "${MR_IID}" "${MR_URL}" >> "${ARTIFACT_DIR}/result.txt"
 
           curl -fsSL --request PUT \
             --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
@@ -372,76 +251,56 @@ MRDESC
           REASON=$(        echo "${BLOCKED_BLOCK}" | grep '^reason:'         | head -1 | sed 's/^reason: //')
           RECOMMENDATION=$(echo "${BLOCKED_BLOCK}" | grep '^recommendation:' | head -1 | sed 's/^recommendation: //')
 
-          cat > "${ARTIFACT_DIR}/result.txt" <<RESULT
-STATUS: BLOCKED
-ISSUE:  #${IID} — ${TITLE}
-REASON: ${REASON}
-NEXT:   ${RECOMMENDATION}
-RESULT
+          printf 'STATUS: BLOCKED\nISSUE:  #%s - %s\nREASON: %s\nNEXT:   %s\n' \
+            "${IID}" "${TITLE}" "${REASON}" "${RECOMMENDATION}" \
+            > "${ARTIFACT_DIR}/result.txt"
+
+          COMMENT="## Ralph — Blocked"
+          COMMENT+=$'\n\n'"**Reason**: ${REASON}"
+          COMMENT+=$'\n\n'"**Recommendation**: ${RECOMMENDATION}"
+          COMMENT+=$'\n\n'"Full artifacts: [CI job ${CI_JOB_ID}](${CI_JOB_URL}) under \`ralph-artifacts/issue-${IID}/\`"
 
           curl -fsSL --request POST \
             --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
             --header "Content-Type: application/json" \
-            --data "$(jq -n \
-              --arg iid    "${IID}" \
-              --arg reason "${REASON}" \
-              --arg rec    "${RECOMMENDATION}" \
-              --arg joburl "${CI_JOB_URL}" \
-              --arg jobid  "${CI_JOB_ID}" \
-              '{body: (
-                "## 🤖 Ralph — Blocked\n\n" +
-                "**Reason**: " + $reason + "\n\n" +
-                "**Recommendation**: " + $rec + "\n\n" +
-                "Full artifacts: [CI job " + $jobid + "](" + $joburl + ")" +
-                " → `ralph-artifacts/issue-" + $iid + "/`"
-              )}')" \
+            --data "$(jq -n --arg body "${COMMENT}" '{body:$body}')" \
             "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${IID}/notes" > /dev/null
 
           echo "    Comment posted on issue #${IID}."
 
         else
-          echo "ERROR: No valid promise signal detected (exit code ${OPENCODE_EXIT})"
-          cat > "${ARTIFACT_DIR}/result.txt" <<RESULT
-STATUS: ERROR
-ISSUE:  #${IID} — ${TITLE}
-EXIT:   ${OPENCODE_EXIT}
-NOTE:   Agent exited without <promise>DONE</promise> or <promise>BLOCKED</promise>. See agent.log.
-RESULT
+          echo "ERROR: No valid promise signal (exit code ${OPENCODE_EXIT})"
+          printf 'STATUS: ERROR\nISSUE:  #%s - %s\nEXIT:   %s\n' \
+            "${IID}" "${TITLE}" "${OPENCODE_EXIT}" \
+            > "${ARTIFACT_DIR}/result.txt"
         fi
 
-        # ── 2g. Cleanup ────────────────────────────────────────────────────
+        # ── 2h. Cleanup ──────────────────────────────────────────────────────
         rm -f .opencode/ralph-loop.local.md 2>/dev/null || true
         git checkout main --quiet
         git branch -D "${BRANCH}" 2>/dev/null || true
         echo "==> Finished issue #${IID}"
+
       done
 
-    # ── 3. Run summary ────────────────────────────────────────────────────────
-    - |
+      # ── 3. Summary ───────────────────────────────────────────────────────────
       echo ""
       echo "════════════════════════════════════════════════"
       echo " Ralph Run — Summary (Job #${CI_JOB_ID})"
       echo "════════════════════════════════════════════════"
-      printf "%-8s %-10s %s\n" "ISSUE" "STATUS" "DETAIL"
-      printf "%-8s %-10s %s\n" "─────" "──────" "──────"
       for RESULT_FILE in ralph-artifacts/issue-*/result.txt; do
         [[ -f "${RESULT_FILE}" ]] || continue
         IID=$(echo "${RESULT_FILE}" | grep -o 'issue-[0-9]*' | grep -o '[0-9]*')
-        STATUS_LINE=$(grep '^STATUS:' "${RESULT_FILE}" | sed 's/^STATUS:\s*//')
+        STATUS_LINE=$(grep '^STATUS:' "${RESULT_FILE}" | sed 's/^STATUS:[[:space:]]*//')
         DETAIL_LINE=$(grep '^SUMMARY:\|^REASON:\|^NOTE:' "${RESULT_FILE}" \
-          | head -1 | sed 's/^[A-Z]*:\s*//' | cut -c1-60)
+          | head -1 | sed 's/^[A-Z]*:[[:space:]]*//' | cut -c1-60)
         case "${STATUS_LINE}" in
           DONE)    ICON="✅" ;;
           BLOCKED) ICON="🚫" ;;
           SKIP*)   ICON="⏭ " ;;
           *)       ICON="❌" ;;
         esac
-        printf "${ICON} %-6s %-10s %s\n" "#${IID}" "${STATUS_LINE}" "${DETAIL_LINE}"
+        printf '%s #%-6s %-10s %s\n' "${ICON}" "${IID}" "${STATUS_LINE}" "${DETAIL_LINE}"
       done
-      echo ""
       echo " Artifacts: ${CI_JOB_URL}/artifacts"
       echo "════════════════════════════════════════════════"
-
-    # ── 4. .gitignore reminder ────────────────────────────────────────────────
-    # Add to your project's .gitignore if not already present:
-    #   .opencode/ralph-loop.local.md
