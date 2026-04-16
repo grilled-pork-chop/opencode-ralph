@@ -95,40 +95,11 @@ nightly-ralph:
         mkdir -p .opencode
 
         # ── 2b. Build the loop prompt ────────────────────────────────────────
-        # Using $'\n' and printf to avoid multi-line bash strings that break
-        # YAML parsing when lines contain colons at low indentation.
-        PROMPT="Fix GitLab issue #${IID}: ${TITLE}"
-        PROMPT+=$'\n\n'
-        PROMPT+="ISSUE DESCRIPTION:"$'\n'
-        PROMPT+="${BODY}"$'\n\n'
-        PROMPT+="WORKFLOW:"$'\n'
-        PROMPT+="1. Explore the codebase to understand the root cause"$'\n'
-        PROMPT+="2. Write .opencode/ralph/plans/issue-${IID}.md with root cause,"$'\n'
-        PROMPT+="   affected files, verification strategy, and implementation steps"$'\n'
-        PROMPT+="3. Write the verification artifact BEFORE touching source code"$'\n'
-        PROMPT+="4. Confirm verification FAILS on the baseline"$'\n'
-        PROMPT+="5. Implement the fix"$'\n'
-        PROMPT+="6. Run verification and confirm it passes"$'\n'
-        PROMPT+="7. Run git diff --stat to confirm only expected files changed"$'\n\n'
-        PROMPT+="CONSTRAINTS:"$'\n'
-        PROMPT+="- Never touch .env files, secrets, or credentials"$'\n'
-        PROMPT+="- Never run git commit, git push, git checkout, or git reset"$'\n'
-        PROMPT+="- Never install packages (npm install, pip install, etc.)"$'\n'
-        PROMPT+="- Never modify verification artifacts after writing them"$'\n\n'
-        PROMPT+="When fully fixed and verified, output EXACTLY:"$'\n'
-        PROMPT+='<promise>DONE'$'\n'
-        PROMPT+='summary: <two sentences: what was wrong and what was changed>'$'\n'
-        PROMPT+='root_cause: <file:line>'$'\n'
-        PROMPT+='files_changed: <comma-separated paths>'$'\n'
-        PROMPT+='verification: <command and result>'$'\n'
-        PROMPT+='</promise>'$'\n\n'
-        PROMPT+="When genuinely blocked, output EXACTLY:"$'\n'
-        PROMPT+='<promise>BLOCKED'$'\n'
-        PROMPT+='reason: <one sentence — specific file/line/error>'$'\n'
-        PROMPT+='recommendation: <what a human should do next>'$'\n'
-        PROMPT+='</promise>'$'\n\n'
-        PROMPT+="Output the promise ONLY when verification actually passes."$'\n'
-        PROMPT+="False promises are not allowed."
+        PROMPT="Issue #${IID}: ${TITLE}. Description: ${BODY}."
+        PROMPT+=$'\n\n'"MANDATE:"
+        PROMPT+=$'\n'"1. FIX: Apply a fix and verify with tests (Strategy A/B/C)."
+        PROMPT+=$'\n'"2. REFACTOR: Once green, refactor the touched code for readability."
+        PROMPT+=$'\n'"3. FINAL: Run tests again. Only output <promise>DONE</promise> if still green."
 
         # ── 2c. Write charfeng1 loop state file ─────────────────────────────
         printf '%s\n' \
@@ -146,7 +117,7 @@ nightly-ralph:
         echo "==> Starting opencode ..."
         set +e
         opencode run \
-          "${PROMPT}" \
+          "/ralph-loop ${PROMPT}" \
           --dangerously-skip-permissions \
           --log-level DEBUG \
           --print-logs \
