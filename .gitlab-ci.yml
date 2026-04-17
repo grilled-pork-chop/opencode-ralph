@@ -92,7 +92,7 @@ nightly-ralph:
         fi
 
         git checkout -b "${BRANCH}"
-        mkdir -p .opencode
+        mkdir -p .ralph-loop
 
         # ── 2b. Build the loop prompt ────────────────────────────────────────
         PROMPT="Issue #${IID}: ${TITLE}. Description: ${BODY}."
@@ -109,9 +109,9 @@ nightly-ralph:
           "maxIterations: ${RALPH_MAX_ITERATIONS}" \
           'sessionId:' \
           '---' \
-          "${PROMPT}" > .opencode/ralph-loop.local.md
+          "${PROMPT}" > .ralph-loop/ralph-loop.local.md
 
-        echo "    Loop state file written (.opencode/ralph-loop.local.md)"
+        echo "    Loop state file written (.ralph-loop/ralph-loop.local.md)"
 
         # ── 2d. Invoke OpenCode ──────────────────────────────────────────────
         echo "==> Starting opencode ..."
@@ -139,10 +139,10 @@ nightly-ralph:
         git diff  main...HEAD         > "${ARTIFACT_DIR}/changes.diff" 2>/dev/null || true
         git diff  main...HEAD --stat  > "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || true
         git log   main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt" 2>/dev/null || true
-        PLAN_PATH=".opencode/ralph/plans/issue-${IID}.md"
+        PLAN_PATH=".ralph-loop/ralph/plans/issue-${IID}.md"
         [[ -f "${PLAN_PATH}" ]] && cp "${PLAN_PATH}" "${ARTIFACT_DIR}/plan.md" || true
 
-        rm -f .opencode/ralph-loop.local.md
+        rm -f .ralph-loop/ralph-loop.local.md
 
         # ── 2g. Signal detection ─────────────────────────────────────────────
         LOG="${ARTIFACT_DIR}/agent.log"
@@ -165,7 +165,7 @@ nightly-ralph:
 
           # ── Commit ──────────────────────────────────────────────────────
           git add --all
-          git restore --staged .opencode/ralph-loop.local.md 2>/dev/null || true
+          git restore --staged .ralph-loop/ralph-loop.local.md 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "WARN: Empty diff despite DONE signal — skipping MR"
@@ -247,7 +247,7 @@ nightly-ralph:
         fi
 
         # ── 2h. Cleanup ──────────────────────────────────────────────────────
-        rm -f .opencode/ralph-loop.local.md 2>/dev/null || true
+        rm -f .ralph-loop/ralph-loop.local.md 2>/dev/null || true
         git checkout main --quiet
         git branch -D "${BRANCH}" 2>/dev/null || true
         echo "==> Finished issue #${IID}"

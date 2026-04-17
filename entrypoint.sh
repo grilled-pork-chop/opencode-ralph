@@ -7,6 +7,21 @@ mkdir -p /root/.config/opencode
 # Create the dynamic config file using Environment Variables
 cat <<EOF > /root/.config/opencode/opencode.json
 {
+  "permission": {
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "bash": "allow",
+    "task": "allow",
+    "skill": "allow",
+    "lsp": "deny",
+    "question": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "codesearch": "deny",
+    "external_directory": "deny"
+  },
   "provider": {
     "local": {
       "npm": "@ai-sdk/openai-compatible",
