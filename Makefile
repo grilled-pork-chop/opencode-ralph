@@ -3,7 +3,7 @@
 # ── Configuration ─────────────────────────────────────────────────────────────
 IMAGE_NAME     ?= opencode-ralph
 TAG            := 1.4.3
-OPENCODE_DEP   := opencode
+VENDOR_DIR     := vendor
 CONTAINER_NAME := opencode-ralph-run
 
 # ── Download ──────────────────────────────────────────────────────────────────
@@ -14,16 +14,16 @@ download: download-api download-npm  ## Download the dependencies
 .PHONY: download-api
 download-api:
 	@echo "→ Downloading models.dev api.json ..."
-	@mkdir -p $(OPENCODE_DEP)
-	@curl -fsSL "https://models.dev/api.json" -o $(OPENCODE_DEP)/api.json
-	@echo "✓ $(OPENCODE_DEP)/api.json ($(shell wc -c < $(OPENCODE_DEP)/api.json) bytes)"
+	@mkdir -p $(VENDOR_DIR)
+	@curl -fsSL "https://models.dev/api.json" -o $(VENDOR_DIR)/api.json
+	@echo "✓ $(VENDOR_DIR)/api.json ($(shell wc -c < $(VENDOR_DIR)/api.json) bytes)"
 
 .PHONY: download-npm
 download-npm:
 	@echo "→ Installing all packages from vendor/package.json ..."
-	@mkdir -p $(OPENCODE_DEP)
-	@npm install --prefix $(OPENCODE_DEP) --silent
-	@echo "✓ Node modules hydrated in $(OPENCODE_DEP)/node_modules"
+	@mkdir -p $(VENDOR_DIR)
+	@npm install --prefix $(VENDOR_DIR) --silent
+	@echo "✓ Node modules hydrated in $(VENDOR_DIR)/node_modules"
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 .PHONY: build
@@ -45,9 +45,9 @@ debug: ## Drop into a shell inside the container
 # ── Clean ─────────────────────────────────────────────────────────────────────
 .PHONY: clean
 clean:
-	@rm -rf $(OPENCODE_DEP)/node_modules
-	@rm -rf $(OPENCODE_DEP)/package-lock.json
-	@rm -f $(OPENCODE_DEP)/api.json
+	@rm -rf $(VENDOR_DIR)/node_modules
+	@rm -rf $(VENDOR_DIR)/package-lock.json
+	@rm -f $(VENDOR_DIR)/api.json
 	@echo "✓ Cleaned"
 
 .PHONY: help

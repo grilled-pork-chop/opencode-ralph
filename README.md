@@ -1,4 +1,6 @@
+# Opencode ralph
 
+## Quickstart
 ```bash
 # Run the analyst
 opencode run --agent analyst "Add a dynamic greeting feature to app.sh"

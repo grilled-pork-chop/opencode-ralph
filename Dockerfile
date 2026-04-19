@@ -6,10 +6,10 @@ ARG OPENCODE_VERSION=1.4.6
 ENV OP_HOME=/root
 
 ENV OP_CONFIG=${OP_HOME}/.config/opencode \
-    OP_CACHE=${OP_HOME}/.cache/opencode
+    OP_CACHE=${OP_HOME}/.cache/opencode/cache
 
 ENV NODE_ENV=production \
-    OPENCODE_MODELS_URL=file://${OP_CACHE}/api.json \
+    OPENCODE_MODELS_URL=file://${OP_CACHE} \
     NODE_PATH=${OP_CACHE}/node_modules \
     VLLM_API_URL=http://ai-server.internal:8000/v1 \
     VLLM_MODEL_NAME=codestral-22b \
