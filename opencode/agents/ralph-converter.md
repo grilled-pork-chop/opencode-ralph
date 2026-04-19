@@ -30,6 +30,14 @@ Take `.ralph/prd.md` and convert it to `.ralph/prd.json`.
 
 ---
 
+## Hard Stop
+
+**Your only output is `.ralph/prd.json`.** The workspace may have no source files — that is correct. Implementation is Ralph's job, not yours.
+
+When the file is saved, reply with: `Created \`.ralph/prd.json\` with N user stories converted from the PRD.` — then stop. The session is complete.
+
+---
+
 ## Output Format
 
 ```json

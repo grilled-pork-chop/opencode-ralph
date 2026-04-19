@@ -29,8 +29,15 @@ Create detailed Product Requirements Documents that are clear, actionable, and s
 1. Receive a feature description
 2. Generate a structured PRD directly from the input — no clarifying questions
 3. Save to `.ralph/prd.md`
+4. **STOP. Your job is done.**
 
-**Important:** Do NOT start implementing. Just create the PRD.
+---
+
+## Hard Stop
+
+**Your only output is `.ralph/prd.md`.** The workspace may be empty — that is correct. Implementation is Ralph's job, not yours.
+
+When the PRD is saved, reply with: `Created PRD at \`.ralph/prd.md\`.` — then stop. The session is complete.
 
 ---
 

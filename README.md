@@ -13,7 +13,7 @@ issue description
       ↓
    ralph (loop)  →  commits on feature branch
       ↓
-  /report  →  .ralph/mr.md  →  MR
+    /mr  →  .ralph/mr.md  →  MR
 ```
 
 Each iteration Ralph:
@@ -62,10 +62,10 @@ RALPH_DIR=/workspace/.ralph ralph 15
 
 ### Step 4 — Generate MR description
 
-Use the `/report` command to generate `.ralph/mr.md` from the completed run:
+Use the `/mr` command to generate `.ralph/mr.md` from the completed run:
 
 ```
-opencode run "/report"
+opencode run "/mr"
 ```
 
 This reads `.ralph/prd.md`, `.ralph/prd.json`, `.ralph/progress.txt`, and `git diff ${MAIN_BRANCH:-main}...HEAD` to produce a structured MR description ready to paste into GitLab.
@@ -160,12 +160,14 @@ curl --request POST \
 | `ralph-scripts/prompt.md`            | Instructions given to each OpenCode instance                        |
 | `opencode/agents/prd.md`             | Agent for generating PRDs (`@prd`)                                  |
 | `opencode/agents/ralph-converter.md` | Agent for converting PRDs to `.ralph/prd.json` (`@ralph-converter`) |
-| `opencode/agents/reporter.md`        | Agent for generating MR descriptions (`@reporter`)                  |
+| `opencode/agents/mr.md`              | Agent for generating MR descriptions (`@mr`)                        |
 | `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                                |
-| `opencode/commands/ralph.md`         | Command for converting PRDs (`/ralph`)                              |
-| `opencode/commands/report.md`        | Command for generating MR description (`/report`)                   |
-| `opencode/skills/ralph/SKILL.md`     | Skill with ralph conversion logic                                   |
+| `opencode/commands/ralph-converter.md` | Command for converting PRDs (`/ralph-converter`)                  |
+| `opencode/commands/mr.md`            | Command for generating MR description (`/mr`)                       |
 | `opencode/skills/prd/SKILL.md`       | Skill with PRD generation logic                                     |
+| `opencode/skills/ralph-converter/SKILL.md` | Skill with PRD-to-JSON conversion logic                       |
+| `opencode/skills/mr/SKILL.md`        | Skill with MR description generation logic                          |
+| `opencode/skills/refacto/SKILL.md`   | Skill for post-feature code cleanup                                 |
 | `entrypoint.sh`                      | Docker entrypoint — writes `opencode.json` from env vars            |
 
 ## Critical Concepts

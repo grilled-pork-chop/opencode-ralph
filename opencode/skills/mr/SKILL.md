@@ -1,29 +1,21 @@
 ---
-name: reporter
-mode: primary
-permission:
-  read: allow
-  edit: allow
-  glob: allow
-  grep: allow
-  bash: allow
-  task: allow
-  skill: allow
-  lsp: deny
-  question: deny
-  webfetch: deny
-  websearch: deny
-  codesearch: deny
-  external_directory: deny
+name: mr
+description: "Generate a GitLab Merge Request description from completed Ralph artifacts. Use after Ralph finishes a run. Triggers on: write the MR, generate MR description, create merge request description, reporter."
 ---
 
-# Role: Documentation Lead
+# MR
 
-Translate the completed Ralph work into a clear, factual MR description ready for human review.
+Translate completed Ralph work into a clear, factual MR description ready for human review.
 
-## Objective
+---
 
-Write `.ralph/mr.md` — a GitLab Merge Request description — from the available Ralph artifacts.
+## Hard Stop
+
+**Your only output is `.ralph/mr.md`.** Read the artifacts, write the file, stop.
+
+When the file is saved, reply with: `Created MR description at \`.ralph/mr.md\`.` — then stop. The session is complete.
+
+---
 
 ## Inputs to Read
 
@@ -31,6 +23,8 @@ Write `.ralph/mr.md` — a GitLab Merge Request description — from the availab
 2. `.ralph/prd.json` — user stories and their `passes` status
 3. `.ralph/progress.txt` — iteration learnings and patterns discovered
 4. Run `git diff ${MAIN_BRANCH:-main}...HEAD` — files changed
+
+---
 
 ## Output Format
 
@@ -70,9 +64,11 @@ Write exactly this structure to `.ralph/mr.md`:
 - [Anything a reviewer should pay attention to]
 ```
 
-## Constraints
+---
 
-- Strict Markdown only — no conversational text
+## Rules
+
+- Strict Markdown only — no conversational text outside the file
 - Pull facts from the artifacts; do not invent
 - If a section has no content, write `_Nothing to report._`
 - `git diff ${MAIN_BRANCH:-main}...HEAD` output goes verbatim in a fenced code block — do not summarize it

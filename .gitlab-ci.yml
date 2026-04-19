@@ -5,7 +5,7 @@
 #   1. @prd             — generate .ralph/prd.md from issue description
 #   2. @ralph-converter — convert .ralph/prd.md to .ralph/prd.json
 #   3. ralph            — autonomous implementation loop
-#   4. @reporter        — write .ralph/mr.md (MR description)
+#   4. @mr              — write .ralph/mr.md (MR description)
 #   5. COMPLETE         → commit, open MR
 #   Artifacts: .ralph/ contents saved per issue
 #
@@ -156,19 +156,20 @@ ralph:
         # ── Step 3: Run ralph loop ────────────────────────────────────────────
         echo "==> [3/4] Running ralph (max ${RALPH_MAX_ITERATIONS} iterations) ..."
         ralph "${RALPH_MAX_ITERATIONS}" 2>&1 | tee "${ARTIFACT_DIR}/step3-ralph.log" || true
+        RALPH_EXIT=${PIPESTATUS[0]}
 
         # ── Collect git artifacts ─────────────────────────────────────────────
         git diff  "${MAIN_BRANCH}...HEAD"          > "${ARTIFACT_DIR}/changes.diff"  2>/dev/null || true
         git diff  "${MAIN_BRANCH}...HEAD" --stat   > "${ARTIFACT_DIR}/changes.stat"  2>/dev/null || true
         git log   "${MAIN_BRANCH}...HEAD" --oneline > "${ARTIFACT_DIR}/commits.txt"  2>/dev/null || true
 
-        # ── Signal detection ──────────────────────────────────────────────────
-        if grep -q '<promise>COMPLETE</promise>' "${ARTIFACT_DIR}/step3-ralph.log"; then
+        # ── Completion check (exit 0 = complete, via signal or prd.json fallback)
+        if [ "${RALPH_EXIT}" -eq 0 ]; then
 
           # ── Step 4: Generate MR description ────────────────────────────────
           echo "==> [4/4] Generating MR description ..."
-          opencode run "/report" --dangerously-skip-permissions \
-            2>&1 | tee "${ARTIFACT_DIR}/step4-reporter.log" || true
+          opencode run "/mr" --dangerously-skip-permissions \
+            2>&1 | tee "${ARTIFACT_DIR}/step4-mr.log" || true
 
           MR_BODY=$(cat ".ralph/mr.md" 2>/dev/null || echo "Closes #${IID}")
 
