@@ -36,14 +36,30 @@ default:
   timeout: 2h
 
 variables:
-  VLLM_API_URL:         "http://ai-server.internal:8000/v1"
-  VLLM_MODEL_NAME:      "codestral-22b"
-  VLLM_API_KEY:         "local-secret"
-  TARGET_LABEL:         "ai-ralph"
-  BRANCH_PREFIX:        "ai/ralph"
-  RALPH_MAX_ITERATIONS: "12"
-  MAIN_BRANCH:          "main"
-  ISSUE_IID:            ""
+  VLLM_API_URL:
+    value: "http://ai-server.internal:8000/v1"
+    description: "vLLM endpoint URL (override in project CI/CD settings for production)"
+  VLLM_MODEL_NAME:
+    value: "codestral-22b"
+    description: "Model name served by the vLLM endpoint"
+  VLLM_API_KEY:
+    value: "local-secret"
+    description: "API key for the vLLM endpoint (use a protected CI/CD variable in production)"
+  TARGET_LABEL:
+    value: "ai-ralph"
+    description: "GitLab issue label to scan — all open issues with this label will be processed"
+  BRANCH_PREFIX:
+    value: "ai/ralph"
+    description: "Prefix for feature branches created by Ralph"
+  RALPH_MAX_ITERATIONS:
+    value: "12"
+    description: "Maximum ralph loop iterations per issue before giving up"
+  MAIN_BRANCH:
+    value: "main"
+    description: "Target branch for MRs and git operations (change to master/develop if needed)"
+  ISSUE_IID:
+    value: ""
+    description: "Run on a single issue by IID — leave empty to scan by TARGET_LABEL"
 
 ralph:
   stage: autonomous-development

@@ -96,13 +96,51 @@ docker run --rm \
 
 ## GitLab CI
 
-The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-ralph`:
+The `.gitlab-ci.yml` runs Ralph on issues labelled `ai-ralph`:
 
-1. Fetches open issues with the target label
+1. Fetches open issues with the target label (or a single issue via `ISSUE_IID`)
 2. Creates a branch per issue (`ai/ralph-<iid>-<title>`)
 3. Runs the full chain: `@prd` → `@ralph-converter` → `ralph` → `@reporter`
 4. On `<promise>COMPLETE</promise>` → commits, opens an MR
 5. On max iterations reached without COMPLETE → logs INCOMPLETE in artifacts
+
+### Required CI/CD Variables (set in GitLab → Settings → CI/CD → Variables)
+
+These must be set at project or group level — do not put secrets in the YAML:
+
+| Variable | Description |
+|---|---|
+| `PROJECT_BOT_TOKEN` | GitLab project access token with `api` + `write_repository` scopes |
+| `VLLM_API_URL` | vLLM endpoint (override the YAML default for production) |
+| `VLLM_API_KEY` | API key for vLLM (mark as **Protected** and **Masked**) |
+
+### Triggering the Pipeline
+
+All variables below are visible and editable in the **Run pipeline** UI (CI/CD → Pipelines → Run pipeline):
+
+| Variable | Default | Description |
+|---|---|---|
+| `ISSUE_IID` | _(empty)_ | Run on a single issue — leave empty to scan by label |
+| `TARGET_LABEL` | `ai-ralph` | Issue label to scan |
+| `RALPH_MAX_ITERATIONS` | `12` | Max loop iterations per issue |
+| `MAIN_BRANCH` | `main` | Target branch for MRs |
+| `VLLM_MODEL_NAME` | `codestral-22b` | Model served by vLLM |
+
+**Run on a specific issue:**
+1. GitLab → CI/CD → Pipelines → **Run pipeline**
+2. Set `ISSUE_IID` to the issue number (e.g. `42`)
+3. Click **Run pipeline**
+
+**Run via API:**
+```bash
+curl --request POST \
+  --form "token=${TRIGGER_TOKEN}" \
+  --form "ref=main" \
+  --form "variables[ISSUE_IID]=42" \
+  "https://gitlab.example.com/api/v4/projects/${PROJECT_ID}/trigger/pipeline"
+```
+
+**Schedule (nightly):** GitLab → CI/CD → Schedules → New schedule. No variables needed — it will process all open `ai-ralph` issues.
 
 ## Key Files
 
