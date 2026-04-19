@@ -1,6 +1,21 @@
 ---
+name: Ralph PRD converter
 description: Convert PRDs to prd.json format for the OpenRalph autonomous agent system. Use when you have an existing PRD and need to convert it to OpenRalph's JSON format. Triggers on: convert this prd, turn this into ralph format, create prd.json from this, ralph json.
-mode: subagent
+mode: primary
+permission:
+  read: allow
+  edit: allow
+  glob: allow
+  grep: allow
+  bash: allow
+  task: allow
+  skill: allow
+  lsp: deny
+  question: deny
+  webfetch: deny
+  websearch: deny
+  codesearch: deny
+  external_directory: deny
 ---
 
 # OpenRalph PRD Converter
