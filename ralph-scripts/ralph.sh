@@ -72,7 +72,7 @@ echo "  RALPH_DATA_DIR : $RALPH_DATA_DIR"
 echo "  RALPH_DIR      : $RALPH_DIR"
 echo "  Max iterations : $MAX_ITERATIONS"
 
-for i in $(seq 1 $MAX_ITERATIONS); do
+for ((i = 1; i <= MAX_ITERATIONS; i++)); do
   echo ""
   echo "═══════════════════════════════════════════════════════"
   echo "  Ralph Iteration $i of $MAX_ITERATIONS"

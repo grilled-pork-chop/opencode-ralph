@@ -1,0 +1,5 @@
+---
+# DL3008: not pinning apt package versions — bullseye repos don't keep old
+# versions around, so pinning here breaks reproducibly rather than helping.
+ignored:
+  - DL3008
