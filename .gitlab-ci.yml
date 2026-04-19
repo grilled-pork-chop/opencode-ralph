@@ -1,14 +1,14 @@
 ##############################################################################
-# .gitlab-ci.yml — Ralph Autonomous Repair Loop
+# .gitlab-ci.yml — Ralph Autonomous Development Loop
 #
-# Uses charfeng1/opencode-ralph-loop (pre-installed in the Docker image) as
-# the loop engine. For each open issue labelled `ai-fix`:
-#   1. Creates a dedicated branch
-#   2. Writes the charfeng1 loop state file to activate the plugin loop
-#   3. Invokes opencode run — the plugin handles re-prompting on session.idle
-#   4. On <promise>DONE</promise> → commits, opens a richly-described MR
-#   5. On <promise>BLOCKED</promise> → posts a comment on the issue
-#   6. Stores per-issue artifacts (log, session trace, diff, plan, result)
+# For each open issue labelled `ai-ralph`:
+#   1. @prd          — generate .ralph/prd.md from issue description
+#   2. @ralph-converter — convert .ralph/prd.md to .ralph/prd.json
+#   3. ralph         — autonomous implementation loop
+#   4. @reporter     — write .ralph/mr.md (MR description)
+#   5. COMPLETE      → commit, open MR
+#      BLOCKED       → post comment on issue
+#   Artifacts: .ralph/ contents saved per issue
 ##############################################################################
 
 stages:
@@ -19,7 +19,7 @@ default:
   timeout: 2h
 
 variables:
-  VLLM_API_URL:         "http://ai-server.internal:8000"
+  VLLM_API_URL:         "http://ai-server.internal:8000/v1"
   VLLM_MODEL_NAME:      "codestral-22b"
   TARGET_LABEL:         "ai-ralph"
   BRANCH_PREFIX:        "ai/ralph"
@@ -30,11 +30,12 @@ nightly-ralph:
 
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
 
   artifacts:
     name: "ralph-${CI_JOB_ID}"
     paths:
-      - ralph-artifacts/
+      - artifacts/
     when: always
     expire_in: 30 days
 
@@ -42,14 +43,14 @@ nightly-ralph:
     - |
       set -euo pipefail
 
-      # ── 0. Setup ────────────────────────────────────────────────────────────
+      # ── 0. Setup ─────────────────────────────────────────────────────────────
       git config --global user.email "ralph-bot@${CI_SERVER_HOST}"
       git config --global user.name  "Ralph Autonomous Worker"
       git remote set-url origin \
         "https://oauth2:${PROJECT_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-      mkdir -p ralph-artifacts
+      mkdir -p artifacts
 
-      # ── 1. Fetch open issues ─────────────────────────────────────────────────
+      # ── 1. Fetch open issues ──────────────────────────────────────────────────
       echo "==> Fetching issues labelled '${TARGET_LABEL}' ..."
       ISSUES_JSON=$(curl -fsSL \
         --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
@@ -58,7 +59,7 @@ nightly-ralph:
       echo "    Found ${ISSUE_COUNT} issue(s)"
       [[ "${ISSUE_COUNT}" -eq 0 ]] && echo "==> Nothing to do." && exit 0
 
-      # ── 2. Per-issue loop ────────────────────────────────────────────────────
+      # ── 2. Per-issue loop ─────────────────────────────────────────────────────
       echo "${ISSUES_JSON}" | jq -c '.[]' | while IFS= read -r ISSUE; do
 
         IID=$(   echo "${ISSUE}" | jq -r '.iid')
@@ -71,7 +72,7 @@ nightly-ralph:
           | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-\|-$//g' \
           | cut -c1-40)
         BRANCH="${BRANCH_PREFIX}-${IID}-${SAFE_TITLE}"
-        ARTIFACT_DIR="ralph-artifacts/issue-${IID}"
+        ARTIFACT_DIR="artifacts/issue-${IID}"
         mkdir -p "${ARTIFACT_DIR}"
 
         echo ""
@@ -80,198 +81,139 @@ nightly-ralph:
         echo " BRANCH   : ${BRANCH}"
         echo "════════════════════════════════════════════════"
 
-        # ── 2a. Branch setup ─────────────────────────────────────────────────
+        # ── Clean repo and create branch ─────────────────────────────────────
         git fetch origin main --quiet
         git checkout main --quiet
         git pull origin main --quiet
+        git clean -fdx --exclude=artifacts/
 
         if git ls-remote --exit-code --heads origin "${BRANCH}" > /dev/null 2>&1; then
           echo "WARN: Branch '${BRANCH}' already exists — skipping"
-          printf 'STATUS: SKIP branch_exists\n' > "${ARTIFACT_DIR}/result.txt"
+          printf 'STATUS: SKIP\nREASON: branch_exists\n' > "${ARTIFACT_DIR}/result.txt"
           continue
         fi
 
         git checkout -b "${BRANCH}"
-        mkdir -p .ralph-loop
+        mkdir -p .ralph
 
-        # ── 2b. Build the loop prompt ────────────────────────────────────────
-        PROMPT="Issue #${IID}: ${TITLE}. Description: ${BODY}."
-        PROMPT+=$'\n\n'"MANDATE:"
-        PROMPT+=$'\n'"1. FIX: Apply a fix and verify with tests (Strategy A/B/C)."
-        PROMPT+=$'\n'"2. REFACTOR: Once green, refactor the touched code for readability."
-        PROMPT+=$'\n'"3. FINAL: Run tests again. Only output <promise>DONE</promise> if still green."
+        # ── Step 1: Generate PRD ──────────────────────────────────────────────
+        echo "==> [1/3] Generating PRD ..."
+        PRD_PROMPT=$(printf '@prd Issue #%s: %s\n\n%s' "${IID}" "${TITLE}" "${BODY}")
+        opencode run "${PRD_PROMPT}" --dangerously-skip-permissions \
+          2>&1 | tee "${ARTIFACT_DIR}/step1-prd.log" || true
 
-        # ── 2c. Write charfeng1 loop state file ─────────────────────────────
-        printf '%s\n' \
-          '---' \
-          'active: true' \
-          'iteration: 1' \
-          "maxIterations: ${RALPH_MAX_ITERATIONS}" \
-          'sessionId:' \
-          '---' \
-          "${PROMPT}" > .ralph-loop/ralph-loop.local.md
-
-        echo "    Loop state file written (.ralph-loop/ralph-loop.local.md)"
-
-        # ── 2d. Invoke OpenCode ──────────────────────────────────────────────
-        echo "==> Starting opencode ..."
-        set +e
-        opencode run \
-          "/ralph-loop ${PROMPT}" \
-          --dangerously-skip-permissions \
-          --log-level DEBUG \
-          --print-logs \
-          2>&1 | tee "${ARTIFACT_DIR}/agent.log"
-        OPENCODE_EXIT=${PIPESTATUS[0]}
-        set -e
-
-        # ── 2e. Export session trace ─────────────────────────────────────────
-        SESSION_ID=$(opencode session list --format json -n 1 2>/dev/null \
-          | jq -r '.[0].id // empty' || true)
-        if [[ -n "${SESSION_ID}" ]]; then
-          opencode session export "${SESSION_ID}" > "${ARTIFACT_DIR}/trace.json" 2>/dev/null || true
-          opencode session stats  "${SESSION_ID}" > "${ARTIFACT_DIR}/stats.txt"  2>/dev/null || true
-        else
-          echo "{}" > "${ARTIFACT_DIR}/trace.json"
+        if [ ! -f ".ralph/prd.md" ]; then
+          printf 'STATUS: ERROR\nREASON: .ralph/prd.md not generated\n' > "${ARTIFACT_DIR}/result.txt"
+          git checkout main --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
+          rm -rf .ralph/ && continue
         fi
 
-        # ── 2f. Collect git artifacts ────────────────────────────────────────
-        git diff  main...HEAD         > "${ARTIFACT_DIR}/changes.diff" 2>/dev/null || true
-        git diff  main...HEAD --stat  > "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || true
-        git log   main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt" 2>/dev/null || true
-        PLAN_PATH=".ralph-loop/ralph/plans/issue-${IID}.md"
-        [[ -f "${PLAN_PATH}" ]] && cp "${PLAN_PATH}" "${ARTIFACT_DIR}/plan.md" || true
+        # ── Step 2: Convert PRD to prd.json ──────────────────────────────────
+        echo "==> [2/3] Converting PRD to prd.json ..."
+        opencode run "@ralph-converter" --dangerously-skip-permissions \
+          2>&1 | tee "${ARTIFACT_DIR}/step2-converter.log" || true
 
-        rm -f .ralph-loop/ralph-loop.local.md
+        if [ ! -f ".ralph/prd.json" ]; then
+          printf 'STATUS: ERROR\nREASON: .ralph/prd.json not generated\n' > "${ARTIFACT_DIR}/result.txt"
+          git checkout main --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
+          rm -rf .ralph/ && continue
+        fi
 
-        # ── 2g. Signal detection ─────────────────────────────────────────────
-        LOG="${ARTIFACT_DIR}/agent.log"
+        # ── Step 3: Run ralph loop ────────────────────────────────────────────
+        echo "==> [3/3] Running ralph (max ${RALPH_MAX_ITERATIONS} iterations) ..."
+        ralph "${RALPH_MAX_ITERATIONS}" 2>&1 | tee "${ARTIFACT_DIR}/step3-ralph.log" || true
 
-        if grep -q '<promise>DONE' "${LOG}"; then
-          echo "==> DONE signal detected"
+        # ── Collect git artifacts ─────────────────────────────────────────────
+        git diff  main...HEAD          > "${ARTIFACT_DIR}/changes.diff"   2>/dev/null || true
+        git diff  main...HEAD --stat   > "${ARTIFACT_DIR}/changes.stat"   2>/dev/null || true
+        git log   main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt"   2>/dev/null || true
 
-          DONE_BLOCK=$(awk '/<promise>DONE/,/<\/promise>/' "${LOG}")
-          SUMMARY=$(     echo "${DONE_BLOCK}" | grep '^summary:'      | head -1 | sed 's/^summary: //')
-          ROOT_CAUSE=$(  echo "${DONE_BLOCK}" | grep '^root_cause:'   | head -1 | sed 's/^root_cause: //')
-          FILES=$(       echo "${DONE_BLOCK}" | grep '^files_changed:' | head -1 | sed 's/^files_changed: //')
-          VERIFICATION=$(echo "${DONE_BLOCK}" | grep '^verification:'  | head -1 | sed 's/^verification: //')
-          GIT_STAT=$(cat "${ARTIFACT_DIR}/changes.stat" 2>/dev/null || echo "No changes recorded")
-          PLAN_CONTENT=$(cat "${ARTIFACT_DIR}/plan.md" 2>/dev/null || echo "Plan file not written.")
-          AGENT_LOG_TAIL=$(tail -80 "${LOG}")
+        # ── Signal detection ──────────────────────────────────────────────────
+        if grep -q '<promise>COMPLETE</promise>' "${ARTIFACT_DIR}/step3-ralph.log"; then
+          echo "==> COMPLETE — generating MR description ..."
 
-          printf 'STATUS:   DONE\nISSUE:    #%s - %s\nBRANCH:   %s\nVERIFY:   %s\nFILES:    %s\nSUMMARY:  %s\n' \
-            "${IID}" "${TITLE}" "${BRANCH}" "${VERIFICATION}" "${FILES}" "${SUMMARY}" \
-            > "${ARTIFACT_DIR}/result.txt"
+          opencode run "@reporter" --dangerously-skip-permissions \
+            2>&1 | tee "${ARTIFACT_DIR}/step4-reporter.log" || true
 
-          # ── Commit ──────────────────────────────────────────────────────
+          MR_BODY=$(cat ".ralph/mr.md" 2>/dev/null || echo "Closes #${IID}")
+
           git add --all
-          git restore --staged .ralph-loop/ralph-loop.local.md 2>/dev/null || true
+          git restore --staged .ralph/ 2>/dev/null || true
 
-          if git diff --cached --quiet; then
-            echo "WARN: Empty diff despite DONE signal — skipping MR"
-            printf 'STATUS: SKIP empty_diff\n' >> "${ARTIFACT_DIR}/result.txt"
-            git checkout main --quiet
-            git branch -D "${BRANCH}"
-            continue
+          if ! git diff --cached --quiet; then
+            git commit -m "feat(#${IID}): ${TITLE}"$'\n\n'"Closes #${IID}"
+            git push origin "${BRANCH}"
+
+            MR_RESPONSE=$(curl -fsSL --request POST \
+              --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$(jq -n \
+                --arg src   "${BRANCH}" \
+                --arg title "feat(#${IID}): ${TITLE}" \
+                --arg desc  "${MR_BODY}" \
+                '{source_branch:$src,target_branch:"main",title:$title,description:$desc,remove_source_branch:true,squash:false,labels:"ai-generated"}')" \
+              "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests")
+
+            MR_URL=$(echo "${MR_RESPONSE}" | jq -r '.web_url // "unknown"')
+            MR_IID=$(echo "${MR_RESPONSE}" | jq -r '.iid // "?"')
+            echo "    MR created: ${MR_URL}"
+
+            curl -fsSL --request PUT \
+              --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
+              --data "add_labels=ai-review-pending" \
+              "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${IID}" > /dev/null
+
+            printf 'STATUS: COMPLETE\nMR: !%s - %s\n' "${MR_IID}" "${MR_URL}" > "${ARTIFACT_DIR}/result.txt"
+          else
+            echo "WARN: Empty diff — skipping MR"
+            printf 'STATUS: SKIP\nREASON: empty_diff\n' > "${ARTIFACT_DIR}/result.txt"
           fi
 
-          git commit -m "fix(#${IID}): ${TITLE}"$'\n\n'"${SUMMARY}"$'\n\n'"Closes #${IID}"
-          git push origin "${BRANCH}"
+        elif grep -q '<promise>BLOCKED</promise>' "${ARTIFACT_DIR}/step3-ralph.log"; then
+          echo "==> BLOCKED — posting comment on issue #${IID} ..."
 
-          # ── MR description ───────────────────────────────────────────────
-          MR_DESC="## Ralph — Autonomous Fix"
-          MR_DESC+=$'\n\n'"**Issue**: [#${IID} — ${TITLE}](${ISSUE_URL})"
-          MR_DESC+=$'\n'"**Branch**: \`${BRANCH}\`"
-          MR_DESC+=$'\n'"**CI Job**: [#${CI_JOB_ID}](${CI_JOB_URL})"
-          MR_DESC+=$'\n'"**Plugin**: [charfeng1/opencode-ralph-loop](https://github.com/charfeng1/opencode-ralph-loop)"
-          MR_DESC+=$'\n\n---'
-          MR_DESC+=$'\n\n'"### Root Cause"$'\n\n'"${ROOT_CAUSE}"
-          MR_DESC+=$'\n\n'"### Summary"$'\n\n'"${SUMMARY}"
-          MR_DESC+=$'\n\n'"### Verification"$'\n\n'"\`${VERIFICATION}\`"
-          MR_DESC+=$'\n\n'"### Changes"$'\n\n''```'$'\n'"${GIT_STAT}"$'\n''```'
-          MR_DESC+=$'\n\n'"### Implementation Plan"$'\n\n''<details><summary>Expand</summary>'$'\n\n'"${PLAN_CONTENT}"$'\n\n''</details>'
-          MR_DESC+=$'\n\n'"### Agent Log"$'\n\n''<details><summary>Expand (last 80 lines)</summary>'$'\n\n''```'$'\n'"${AGENT_LOG_TAIL}"$'\n''```'$'\n\n''</details>'
-          MR_DESC+=$'\n\n'"### Artifacts"
-          MR_DESC+=$'\n'"Attached to [CI job #${CI_JOB_ID}](${CI_JOB_URL}) under \`ralph-artifacts/issue-${IID}/\`."
-          MR_DESC+=$'\n\n'"Closes #${IID}"
+          REASON=$(awk '/reason:/        {$1=""; print; exit}' "${ARTIFACT_DIR}/step3-ralph.log" | xargs || echo "Unknown")
+          RECOMMENDATION=$(awk '/recommendation:/ {$1=""; print; exit}' "${ARTIFACT_DIR}/step3-ralph.log" | xargs || echo "Manual review required")
 
-          MR_RESPONSE=$(curl -fsSL --request POST \
-            --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data "$(jq -n \
-              --arg src   "${BRANCH}" \
-              --arg title "fix(#${IID}): ${TITLE}" \
-              --arg desc  "${MR_DESC}" \
-              '{source_branch:$src,target_branch:"main",title:$title,description:$desc,remove_source_branch:true,squash:false,labels:"ai-generated"}')" \
-            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests")
-
-          MR_URL=$(echo "${MR_RESPONSE}" | jq -r '.web_url // "unknown"')
-          MR_IID=$(echo "${MR_RESPONSE}" | jq -r '.iid // "?"')
-          echo "    MR created: ${MR_URL}"
-          printf 'MR: !%s - %s\n' "${MR_IID}" "${MR_URL}" >> "${ARTIFACT_DIR}/result.txt"
-
-          curl -fsSL --request PUT \
-            --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
-            --data "add_labels=ai-review-pending" \
-            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${IID}" > /dev/null
-
-        elif grep -q '<promise>BLOCKED' "${LOG}"; then
-          echo "==> BLOCKED signal detected"
-
-          BLOCKED_BLOCK=$(awk '/<promise>BLOCKED/,/<\/promise>/' "${LOG}")
-          REASON=$(        echo "${BLOCKED_BLOCK}" | grep '^reason:'         | head -1 | sed 's/^reason: //')
-          RECOMMENDATION=$(echo "${BLOCKED_BLOCK}" | grep '^recommendation:' | head -1 | sed 's/^recommendation: //')
-
-          printf 'STATUS: BLOCKED\nISSUE:  #%s - %s\nREASON: %s\nNEXT:   %s\n' \
-            "${IID}" "${TITLE}" "${REASON}" "${RECOMMENDATION}" \
-            > "${ARTIFACT_DIR}/result.txt"
-
-          COMMENT="## Ralph — Blocked"
-          COMMENT+=$'\n\n'"**Reason**: ${REASON}"
-          COMMENT+=$'\n\n'"**Recommendation**: ${RECOMMENDATION}"
-          COMMENT+=$'\n\n'"Full artifacts: [CI job ${CI_JOB_ID}](${CI_JOB_URL}) under \`ralph-artifacts/issue-${IID}/\`"
-
+          COMMENT=$(printf '## Ralph — Blocked\n\n**Reason**: %s\n\n**Recommendation**: %s\n\nArtifacts: [CI job #%s](%s)' \
+            "${REASON}" "${RECOMMENDATION}" "${CI_JOB_ID}" "${CI_JOB_URL}")
           curl -fsSL --request POST \
             --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
             --header "Content-Type: application/json" \
             --data "$(jq -n --arg body "${COMMENT}" '{body:$body}')" \
             "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${IID}/notes" > /dev/null
 
-          echo "    Comment posted on issue #${IID}."
+          printf 'STATUS: BLOCKED\nREASON: %s\n' "${REASON}" > "${ARTIFACT_DIR}/result.txt"
 
         else
-          echo "ERROR: No valid promise signal (exit code ${OPENCODE_EXIT})"
-          printf 'STATUS: ERROR\nISSUE:  #%s - %s\nEXIT:   %s\n' \
-            "${IID}" "${TITLE}" "${OPENCODE_EXIT}" \
-            > "${ARTIFACT_DIR}/result.txt"
+          printf 'STATUS: ERROR\nREASON: no promise signal\n' > "${ARTIFACT_DIR}/result.txt"
         fi
 
-        # ── 2h. Cleanup ──────────────────────────────────────────────────────
-        rm -f .ralph-loop/ralph-loop.local.md 2>/dev/null || true
+        # ── Copy .ralph/ to artifacts then clean ──────────────────────────────
+        cp -r .ralph/. "${ARTIFACT_DIR}/ralph/" 2>/dev/null || true
+        rm -rf .ralph/
         git checkout main --quiet
         git branch -D "${BRANCH}" 2>/dev/null || true
-        echo "==> Finished issue #${IID}"
+        echo "==> Done issue #${IID}"
 
       done
 
-      # ── 3. Summary ───────────────────────────────────────────────────────────
+      # ── 3. Summary ────────────────────────────────────────────────────────────
       echo ""
       echo "════════════════════════════════════════════════"
       echo " Ralph Run — Summary (Job #${CI_JOB_ID})"
       echo "════════════════════════════════════════════════"
-      for RESULT_FILE in ralph-artifacts/issue-*/result.txt; do
+      for RESULT_FILE in artifacts/issue-*/result.txt; do
         [[ -f "${RESULT_FILE}" ]] || continue
         IID=$(echo "${RESULT_FILE}" | grep -o 'issue-[0-9]*' | grep -o '[0-9]*')
-        STATUS_LINE=$(grep '^STATUS:' "${RESULT_FILE}" | sed 's/^STATUS:[[:space:]]*//')
-        DETAIL_LINE=$(grep '^SUMMARY:\|^REASON:\|^NOTE:' "${RESULT_FILE}" \
-          | head -1 | sed 's/^[A-Z]*:[[:space:]]*//' | cut -c1-60)
-        case "${STATUS_LINE}" in
-          DONE)    ICON="✅" ;;
-          BLOCKED) ICON="🚫" ;;
-          SKIP*)   ICON="⏭ " ;;
-          *)       ICON="❌" ;;
+        STATUS=$(grep '^STATUS:' "${RESULT_FILE}" | sed 's/^STATUS:[[:space:]]*//')
+        case "${STATUS}" in
+          COMPLETE) ICON="✅" ;;
+          BLOCKED)  ICON="🚫" ;;
+          SKIP*)    ICON="⏭ " ;;
+          *)        ICON="❌" ;;
         esac
-        printf '%s #%-6s %-10s %s\n' "${ICON}" "${IID}" "${STATUS_LINE}" "${DETAIL_LINE}"
+        printf '%s  #%-6s %s\n' "${ICON}" "${IID}" "${STATUS}"
       done
       echo " Artifacts: ${CI_JOB_URL}/artifacts"
       echo "════════════════════════════════════════════════"
