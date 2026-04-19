@@ -21,6 +21,7 @@ default:
 variables:
   VLLM_API_URL:         "http://ai-server.internal:8000/v1"
   VLLM_MODEL_NAME:      "codestral-22b"
+  VLLM_API_KEY:         "local-secret"
   TARGET_LABEL:         "ai-ralph"
   BRANCH_PREFIX:        "ai/ralph"
   RALPH_MAX_ITERATIONS: "12"
@@ -169,24 +170,9 @@ nightly-ralph:
             printf 'STATUS: SKIP\nREASON: empty_diff\n' > "${ARTIFACT_DIR}/result.txt"
           fi
 
-        elif grep -q '<promise>BLOCKED</promise>' "${ARTIFACT_DIR}/step3-ralph.log"; then
-          echo "==> BLOCKED — posting comment on issue #${IID} ..."
-
-          REASON=$(awk '/reason:/        {$1=""; print; exit}' "${ARTIFACT_DIR}/step3-ralph.log" | xargs || echo "Unknown")
-          RECOMMENDATION=$(awk '/recommendation:/ {$1=""; print; exit}' "${ARTIFACT_DIR}/step3-ralph.log" | xargs || echo "Manual review required")
-
-          COMMENT=$(printf '## Ralph — Blocked\n\n**Reason**: %s\n\n**Recommendation**: %s\n\nArtifacts: [CI job #%s](%s)' \
-            "${REASON}" "${RECOMMENDATION}" "${CI_JOB_ID}" "${CI_JOB_URL}")
-          curl -fsSL --request POST \
-            --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data "$(jq -n --arg body "${COMMENT}" '{body:$body}')" \
-            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${IID}/notes" > /dev/null
-
-          printf 'STATUS: BLOCKED\nREASON: %s\n' "${REASON}" > "${ARTIFACT_DIR}/result.txt"
-
         else
-          printf 'STATUS: ERROR\nREASON: no promise signal\n' > "${ARTIFACT_DIR}/result.txt"
+          echo "WARN: No COMPLETE signal — max iterations reached or opencode error"
+          printf 'STATUS: INCOMPLETE\nREASON: max iterations reached or opencode error\n' > "${ARTIFACT_DIR}/result.txt"
         fi
 
         # ── Copy .ralph/ to artifacts then clean ──────────────────────────────
@@ -208,10 +194,10 @@ nightly-ralph:
         IID=$(echo "${RESULT_FILE}" | grep -o 'issue-[0-9]*' | grep -o '[0-9]*')
         STATUS=$(grep '^STATUS:' "${RESULT_FILE}" | sed 's/^STATUS:[[:space:]]*//')
         case "${STATUS}" in
-          COMPLETE) ICON="✅" ;;
-          BLOCKED)  ICON="🚫" ;;
-          SKIP*)    ICON="⏭ " ;;
-          *)        ICON="❌" ;;
+          COMPLETE)   ICON="✅" ;;
+          SKIP*)      ICON="⏭ " ;;
+          INCOMPLETE) ICON="⏱ " ;;
+          *)          ICON="❌" ;;
         esac
         printf '%s  #%-6s %s\n' "${ICON}" "${IID}" "${STATUS}"
       done

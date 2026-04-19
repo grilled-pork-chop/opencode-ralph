@@ -45,5 +45,4 @@ echo "--- AI AGENT CONFIGURED ---"
 echo "Target Model: ${VLLM_MODEL_NAME}"
 echo "vLLM Endpoint: ${VLLM_API_URL}"
 
-# Pass the command to the OpenCode CLI
-exec opencode "$@"
+exec "$@"

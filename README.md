@@ -92,7 +92,7 @@ The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-fix`:
 2. Creates a branch per issue (`ai/ralph-<iid>-<title>`)
 3. Calls `ralph` — the loop works on the issue description
 4. On `<promise>COMPLETE</promise>` → commits, opens an MR
-5. On `<promise>BLOCKED</promise>` → posts a comment on the issue
+5. On max iterations reached without COMPLETE → logs INCOMPLETE in artifacts
 
 ## Key Files
 
