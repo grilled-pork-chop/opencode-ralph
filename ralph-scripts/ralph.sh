@@ -8,7 +8,7 @@
 
 set -e
 
-MAX_ITERATIONS=${1:-10}
+MAX_ITERATIONS=${1:-100}
 
 RALPH_HOME=${RALPH_HOME:-$(cd "$(dirname "$(readlink -f "$0")")" && pwd)}
 RALPH_DATA_DIR=${RALPH_DATA_DIR:-$PWD}

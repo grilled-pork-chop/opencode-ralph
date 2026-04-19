@@ -2,18 +2,24 @@
 
 You are an autonomous coding agent working on a software project.
 
+## Hard Stop
+
+**You implement exactly one user story per run, then stop.**
+
+Your run ends after step 9 below. The harness will call you again for the next story. Completing multiple stories in one run breaks the loop — another iteration will never run.
+
 ## Your Task
 
 1. Read the PRD at `.ralph/prd.json`
 2. Read the progress log at `.ralph/progress.txt` (check Codebase Patterns section first)
 3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from `${MAIN_BRANCH:-main}`.
-4. Pick the **highest priority** user story where `passes: false`
-5. Implement that single user story
+4. Pick the **single highest priority** user story where `passes: false` — this is the only story you will work on
+5. Implement that story fully, including all its acceptance criteria
 6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
 7. Update AGENTS.md files if you discover reusable patterns (see below)
-8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
-9. Update `.ralph/prd.json` to set `passes: true` for the completed story
-10. Append your progress to `.ralph/progress.txt`
+8. Commit ALL changes with message: `feat: [Story ID] - [Story Title]`
+9. Update `.ralph/prd.json` to set `passes: true` for this story only, then append progress to `.ralph/progress.txt`
+10. Check the Stop Condition below and end the session
 
 ## Progress Report Format
 
@@ -101,9 +107,8 @@ Do not add any text after it. This signal is parsed by the harness to stop the l
 
 If there are still stories with `passes: false`, end your response normally — another iteration will pick up the next story.
 
-## Important
+## Reminders
 
-- Work on ONE story per iteration
-- Commit frequently
-- Keep CI green
+- Commit frequently within a story — don't accumulate large uncommitted diffs
+- Keep CI green — broken code compounds across iterations
 - Read the Codebase Patterns section in `.ralph/progress.txt` before starting

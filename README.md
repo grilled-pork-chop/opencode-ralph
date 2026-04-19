@@ -52,7 +52,7 @@ This reads `.ralph/prd.md` and writes `.ralph/prd.json` with user stories ready 
 ralph [max_iterations]
 ```
 
-Default is 10 iterations. `.ralph/prd.json` must exist in the project directory.
+Default is 100 iterations. `.ralph/prd.json` must exist in the project directory.
 
 ```bash
 # Override paths explicitly
@@ -101,7 +101,7 @@ docker run --rm \
   -v $(pwd):/workspace \
   -e VLLM_API_URL=http://your-server:8000/v1 \
   -e VLLM_API_KEY=your-key \
-  ralph ralph 10
+  ralph ralph 100
 ```
 
 ## GitLab CI
@@ -154,21 +154,21 @@ curl --request POST \
 
 ## Key Files
 
-| File                                 | Purpose                                                             |
-| ------------------------------------ | ------------------------------------------------------------------- |
-| `ralph-scripts/ralph.sh`             | The bash loop that spawns fresh OpenCode instances                  |
-| `ralph-scripts/prompt.md`            | Instructions given to each OpenCode instance                        |
-| `opencode/agents/prd.md`             | Agent for generating PRDs (`@prd`)                                  |
-| `opencode/agents/ralph-converter.md` | Agent for converting PRDs to `.ralph/prd.json` (`@ralph-converter`) |
-| `opencode/agents/mr.md`              | Agent for generating MR descriptions (`@mr`)                        |
-| `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                                |
-| `opencode/commands/ralph-converter.md` | Command for converting PRDs (`/ralph-converter`)                  |
-| `opencode/commands/mr.md`            | Command for generating MR description (`/mr`)                       |
-| `opencode/skills/prd/SKILL.md`       | Skill with PRD generation logic                                     |
-| `opencode/skills/ralph-converter/SKILL.md` | Skill with PRD-to-JSON conversion logic                       |
-| `opencode/skills/mr/SKILL.md`        | Skill with MR description generation logic                          |
-| `opencode/skills/refacto/SKILL.md`   | Skill for post-feature code cleanup                                 |
-| `entrypoint.sh`                      | Docker entrypoint — writes `opencode.json` from env vars            |
+| File                                       | Purpose                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------- |
+| `ralph-scripts/ralph.sh`                   | The bash loop that spawns fresh OpenCode instances                  |
+| `ralph-scripts/prompt.md`                  | Instructions given to each OpenCode instance                        |
+| `opencode/agents/prd.md`                   | Agent for generating PRDs (`@prd`)                                  |
+| `opencode/agents/ralph-converter.md`       | Agent for converting PRDs to `.ralph/prd.json` (`@ralph-converter`) |
+| `opencode/agents/mr.md`                    | Agent for generating MR descriptions (`@mr`)                        |
+| `opencode/commands/prd.md`                 | Command for generating PRDs (`/prd`)                                |
+| `opencode/commands/ralph-converter.md`     | Command for converting PRDs (`/ralph-converter`)                    |
+| `opencode/commands/mr.md`                  | Command for generating MR description (`/mr`)                       |
+| `opencode/skills/prd/SKILL.md`             | Skill with PRD generation logic                                     |
+| `opencode/skills/ralph-converter/SKILL.md` | Skill with PRD-to-JSON conversion logic                             |
+| `opencode/skills/mr/SKILL.md`              | Skill with MR description generation logic                          |
+| `opencode/skills/refacto/SKILL.md`         | Skill for post-feature code cleanup                                 |
+| `entrypoint.sh`                            | Docker entrypoint — writes `opencode.json` from env vars            |
 
 ## Critical Concepts
 
