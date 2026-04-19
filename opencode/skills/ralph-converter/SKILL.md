@@ -123,6 +123,32 @@ Frontend stories are NOT complete until visually verified. Ralph will use the de
 4. **All stories**: `passes: false` and empty `notes`
 5. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
 6. **Always add**: "Typecheck passes" to every story's acceptance criteria
+7. **Always append**: A post-feature cleanup story as the final entry (see below)
+
+---
+
+## Post-Feature Cleanup Story (Always Last)
+
+**Every prd.json must end with a refactoring story** at the highest priority number (lowest priority). It runs after all features land, so it has full context of everything changed in the branch.
+
+```json
+{
+  "id": "US-NNN",
+  "title": "Post-feature cleanup",
+  "description": "As a developer, I want the feature implementation cleaned up so the codebase stays maintainable.",
+  "acceptanceCriteria": [
+    "Remove dead code, unused imports, and duplicated logic introduced in this branch",
+    "Follow the current code architecture patterns",
+    "Typecheck passes",
+    "Tests pass"
+  ],
+  "priority": 5,
+  "passes": false,
+  "notes": ""
+}
+```
+
+**Why last?** Ralph has no memory between iterations. A refacto story that runs before features are complete cannot see the full picture. Running it last gives it all the context it needs and keeps feature stories focused on delivery.
 
 ---
 
@@ -222,6 +248,20 @@ Add ability to mark tasks with different statuses.
       "priority": 4,
       "passes": false,
       "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Post-feature cleanup",
+      "description": "As a developer, I want the feature implementation cleaned up so the codebase stays maintainable.",
+      "acceptanceCriteria": [
+        "Remove dead code, unused imports, and duplicated logic introduced in this branch",
+        "Follow the current code architecture patterns",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
@@ -255,3 +295,4 @@ Before writing prd.json, verify:
 - [ ] UI stories have "Verify in browser using dev-browser skill" as criterion
 - [ ] Acceptance criteria are verifiable (not vague)
 - [ ] No story depends on a later story
+- [ ] Final story is the post-feature cleanup

@@ -132,7 +132,7 @@ ralph:
 
         # ── Step 1: Generate PRD ──────────────────────────────────────────────
         echo "==> [1/4] Generating PRD ..."
-        PRD_PROMPT=$(printf '@prd Issue #%s: %s\n\n%s' "${IID}" "${TITLE}" "${BODY}")
+        PRD_PROMPT=$(printf '/prd Issue #%s: %s\n\n%s' "${IID}" "${TITLE}" "${BODY}")
         opencode run "${PRD_PROMPT}" --dangerously-skip-permissions \
           2>&1 | tee "${ARTIFACT_DIR}/step1-prd.log" || true
 
@@ -144,7 +144,7 @@ ralph:
 
         # ── Step 2: Convert PRD to prd.json ──────────────────────────────────
         echo "==> [2/4] Converting PRD to prd.json ..."
-        opencode run "@ralph-converter" --dangerously-skip-permissions \
+        opencode run "/ralph-converter" --dangerously-skip-permissions \
           2>&1 | tee "${ARTIFACT_DIR}/step2-converter.log" || true
 
         if [ ! -f ".ralph/prd.json" ]; then
@@ -167,7 +167,7 @@ ralph:
 
           # ── Step 4: Generate MR description ────────────────────────────────
           echo "==> [4/4] Generating MR description ..."
-          opencode run "@reporter" --dangerously-skip-permissions \
+          opencode run "/report" --dangerously-skip-permissions \
             2>&1 | tee "${ARTIFACT_DIR}/step4-reporter.log" || true
 
           MR_BODY=$(cat ".ralph/mr.md" 2>/dev/null || echo "Closes #${IID}")

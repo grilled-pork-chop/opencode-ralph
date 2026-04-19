@@ -92,12 +92,14 @@ A frontend story is NOT complete until browser verification passes.
 
 ## Stop Condition
 
-After completing a user story, check if ALL stories have `passes: true`.
+After completing a user story (or at the start of an iteration if the PRD is already fully done), check if ALL stories in `.ralph/prd.json` have `passes: true`.
 
-If ALL stories are complete and passing, reply with:
+**If ALL stories are complete**, your final output line MUST be exactly:
 <promise>COMPLETE</promise>
 
-If there are still stories with `passes: false`, end your response normally (another iteration will pick up the next story).
+Do not add any text after it. This signal is parsed by the harness to stop the loop.
+
+If there are still stories with `passes: false`, end your response normally — another iteration will pick up the next story.
 
 ## Important
 

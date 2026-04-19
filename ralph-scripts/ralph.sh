@@ -82,7 +82,16 @@ for i in $(seq 1 $MAX_ITERATIONS); do
 
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo ""
-    echo "Ralph completed all tasks!"
+    echo "Ralph completed all tasks! (signal)"
+    echo "Completed at iteration $i of $MAX_ITERATIONS"
+    exit 0
+  fi
+
+  # Fallback: check prd.json directly — model may forget to emit the signal
+  INCOMPLETE=$(jq '[.userStories[] | select(.passes == false)] | length' "$PRD_FILE" 2>/dev/null || echo "-1")
+  if [ "$INCOMPLETE" = "0" ]; then
+    echo ""
+    echo "Ralph completed all tasks! (verified via prd.json)"
     echo "Completed at iteration $i of $MAX_ITERATIONS"
     exit 0
   fi

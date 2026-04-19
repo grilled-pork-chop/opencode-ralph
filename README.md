@@ -7,13 +7,13 @@ Ralph is an autonomous AI agent loop built on [OpenCode](https://opencode.ai). I
 ```
 issue description
       ↓
-   @prd  →  .ralph/prd.md
+   /prd  →  .ralph/prd.md
       ↓
-@ralph-converter  →  .ralph/prd.json
+/ralph-converter  →  .ralph/prd.json
       ↓
    ralph (loop)  →  commits on feature branch
       ↓
-  @reporter  →  .ralph/mr.md  →  MR
+  /report  →  .ralph/mr.md  →  MR
 ```
 
 Each iteration Ralph:
@@ -60,6 +60,16 @@ RALPH_DATA_DIR=/workspace ralph 15
 RALPH_DIR=/workspace/.ralph ralph 15
 ```
 
+### Step 4 — Generate MR description
+
+Use the `/report` command to generate `.ralph/mr.md` from the completed run:
+
+```
+opencode run "/report"
+```
+
+This reads `.ralph/prd.md`, `.ralph/prd.json`, `.ralph/progress.txt`, and `git diff ${MAIN_BRANCH:-main}...HEAD` to produce a structured MR description ready to paste into GitLab.
+
 ## Docker Image
 
 The image bakes in:
@@ -100,7 +110,7 @@ The `.gitlab-ci.yml` runs Ralph on issues labelled `ai-ralph`:
 
 1. Fetches open issues with the target label (or a single issue via `ISSUE_IID`)
 2. Creates a branch per issue (`ai/ralph-<iid>-<title>`)
-3. Runs the full chain: `@prd` → `@ralph-converter` → `ralph` → `@reporter`
+3. Runs the full chain: `/prd` → `/ralph-converter` → `ralph` → `/report`
 4. On `<promise>COMPLETE</promise>` → commits, opens an MR
 5. On max iterations reached without COMPLETE → logs INCOMPLETE in artifacts
 
@@ -153,6 +163,7 @@ curl --request POST \
 | `opencode/agents/reporter.md`        | Agent for generating MR descriptions (`@reporter`)                  |
 | `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                                |
 | `opencode/commands/ralph.md`         | Command for converting PRDs (`/ralph`)                              |
+| `opencode/commands/report.md`        | Command for generating MR description (`/report`)                   |
 | `opencode/skills/ralph/SKILL.md`     | Skill with ralph conversion logic                                   |
 | `opencode/skills/prd/SKILL.md`       | Skill with PRD generation logic                                     |
 | `entrypoint.sh`                      | Docker entrypoint — writes `opencode.json` from env vars            |
