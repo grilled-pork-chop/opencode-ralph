@@ -1,5 +1,6 @@
 ---
 description: Generate a Product Requirements Document. Usage: /prd <feature description>
+agent: prd-generator
 ---
 
 Generate a PRD for the following feature: $ARGUMENTS

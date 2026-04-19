@@ -31,7 +31,7 @@ Each iteration Ralph:
 Use the `@prd` agent to create a requirements document from a feature description:
 
 ```
-@prd Add a dynamic greeting feature to app.sh
+opencode run "/prd Add a dynamic greeting feature to app.sh"
 ```
 
 The agent saves the output to `.ralph/prd.md`.
@@ -41,7 +41,7 @@ The agent saves the output to `.ralph/prd.md`.
 Use the `@ralph-converter` agent to convert the markdown PRD to the JSON format Ralph understands:
 
 ```
-@ralph-converter
+opencode run "/ralph-converter"
 ```
 
 This reads `.ralph/prd.md` and writes `.ralph/prd.json` with user stories ready for autonomous execution.
@@ -69,14 +69,14 @@ The image bakes in:
 
 Environment variables:
 
-| Variable          | Default                             | Purpose                                                |
-| ----------------- | ----------------------------------- | ------------------------------------------------------ |
-| `RALPH_HOME`      | `/usr/local/share/ralph`            | Directory containing `prompt.md`                       |
-| `RALPH_DATA_DIR`  | `$PWD`                              | Project root                                           |
-| `RALPH_DIR`       | `$RALPH_DATA_DIR/.ralph`            | Where `prd.json`, `progress.txt`, archives live        |
-| `VLLM_API_URL`    | `http://ai-server.internal:8000/v1` | vLLM endpoint                                          |
-| `VLLM_MODEL_NAME` | `codestral-22b`                     | Model to use                                           |
-| `VLLM_API_KEY`    | `local-secret`                      | API key for the vLLM endpoint                          |
+| Variable          | Default                             | Purpose                                         |
+| ----------------- | ----------------------------------- | ----------------------------------------------- |
+| `RALPH_HOME`      | `/usr/local/share/ralph`            | Directory containing `prompt.md`                |
+| `RALPH_DATA_DIR`  | `$PWD`                              | Project root                                    |
+| `RALPH_DIR`       | `$RALPH_DATA_DIR/.ralph`            | Where `prd.json`, `progress.txt`, archives live |
+| `VLLM_API_URL`    | `http://ai-server.internal:8000/v1` | vLLM endpoint                                   |
+| `VLLM_MODEL_NAME` | `codestral-22b`                     | Model to use                                    |
+| `VLLM_API_KEY`    | `local-secret`                      | API key for the vLLM endpoint                   |
 
 Build the image:
 
@@ -108,23 +108,23 @@ The `.gitlab-ci.yml` runs Ralph on issues labelled `ai-ralph`:
 
 These must be set at project or group level — do not put secrets in the YAML:
 
-| Variable | Description |
-|---|---|
+| Variable            | Description                                                        |
+| ------------------- | ------------------------------------------------------------------ |
 | `PROJECT_BOT_TOKEN` | GitLab project access token with `api` + `write_repository` scopes |
-| `VLLM_API_URL` | vLLM endpoint (override the YAML default for production) |
-| `VLLM_API_KEY` | API key for vLLM (mark as **Protected** and **Masked**) |
+| `VLLM_API_URL`      | vLLM endpoint (override the YAML default for production)           |
+| `VLLM_API_KEY`      | API key for vLLM (mark as **Protected** and **Masked**)            |
 
 ### Triggering the Pipeline
 
 All variables below are visible and editable in the **Run pipeline** UI (CI/CD → Pipelines → Run pipeline):
 
-| Variable | Default | Description |
-|---|---|---|
-| `ISSUE_IID` | _(empty)_ | Run on a single issue — leave empty to scan by label |
-| `TARGET_LABEL` | `ai-ralph` | Issue label to scan |
-| `RALPH_MAX_ITERATIONS` | `12` | Max loop iterations per issue |
-| `MAIN_BRANCH` | `main` | Target branch for MRs |
-| `VLLM_MODEL_NAME` | `codestral-22b` | Model served by vLLM |
+| Variable               | Default         | Description                                          |
+| ---------------------- | --------------- | ---------------------------------------------------- |
+| `ISSUE_IID`            | _(empty)_       | Run on a single issue — leave empty to scan by label |
+| `TARGET_LABEL`         | `ai-ralph`      | Issue label to scan                                  |
+| `RALPH_MAX_ITERATIONS` | `12`            | Max loop iterations per issue                        |
+| `MAIN_BRANCH`          | `main`          | Target branch for MRs                                |
+| `VLLM_MODEL_NAME`      | `codestral-22b` | Model served by vLLM                                 |
 
 **Run on a specific issue:**
 1. GitLab → CI/CD → Pipelines → **Run pipeline**
@@ -144,18 +144,18 @@ curl --request POST \
 
 ## Key Files
 
-| File                                 | Purpose                                                      |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `ralph-scripts/ralph.sh`             | The bash loop that spawns fresh OpenCode instances           |
-| `ralph-scripts/prompt.md`            | Instructions given to each OpenCode instance                 |
-| `opencode/agents/prd.md`             | Agent for generating PRDs (`@prd`)                           |
+| File                                 | Purpose                                                             |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| `ralph-scripts/ralph.sh`             | The bash loop that spawns fresh OpenCode instances                  |
+| `ralph-scripts/prompt.md`            | Instructions given to each OpenCode instance                        |
+| `opencode/agents/prd.md`             | Agent for generating PRDs (`@prd`)                                  |
 | `opencode/agents/ralph-converter.md` | Agent for converting PRDs to `.ralph/prd.json` (`@ralph-converter`) |
-| `opencode/agents/reporter.md`        | Agent for generating MR descriptions (`@reporter`)           |
-| `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                         |
-| `opencode/commands/ralph.md`         | Command for converting PRDs (`/ralph`)                       |
-| `opencode/skills/ralph/SKILL.md`     | Skill with ralph conversion logic                            |
-| `opencode/skills/prd/SKILL.md`       | Skill with PRD generation logic                              |
-| `entrypoint.sh`                      | Docker entrypoint — writes `opencode.json` from env vars     |
+| `opencode/agents/reporter.md`        | Agent for generating MR descriptions (`@reporter`)                  |
+| `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                                |
+| `opencode/commands/ralph.md`         | Command for converting PRDs (`/ralph`)                              |
+| `opencode/skills/ralph/SKILL.md`     | Skill with ralph conversion logic                                   |
+| `opencode/skills/prd/SKILL.md`       | Skill with PRD generation logic                                     |
+| `entrypoint.sh`                      | Docker entrypoint — writes `opencode.json` from env vars            |
 
 ## Critical Concepts
 
