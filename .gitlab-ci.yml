@@ -1,15 +1,32 @@
 ##############################################################################
 # .gitlab-ci.yml — Ralph Autonomous Development Loop
 #
-# For each open issue labelled `ai-ralph`:
-#   1. @prd          — generate .ralph/prd.md from issue description
+# For each open issue labelled `ai-ralph` (or a specific issue via ISSUE_IID):
+#   1. @prd             — generate .ralph/prd.md from issue description
 #   2. @ralph-converter — convert .ralph/prd.md to .ralph/prd.json
-#   3. ralph         — autonomous implementation loop
-#   4. @reporter     — write .ralph/mr.md (MR description)
-#   5. COMPLETE      → commit, open MR
-#      BLOCKED       → post comment on issue
+#   3. ralph            — autonomous implementation loop
+#   4. @reporter        — write .ralph/mr.md (MR description)
+#   5. COMPLETE         → commit, open MR
 #   Artifacts: .ralph/ contents saved per issue
+#
+# Trigger manually:
+#   - Via UI:  Pipeline → Run pipeline (set variables as needed)
+#   - Via API: POST /projects/:id/trigger/pipeline
+#   - Via schedule: set up in GitLab CI/CD → Schedules
+#
+# Key variables to override:
+#   ISSUE_IID            — run on a single issue instead of scanning by label
+#   TARGET_LABEL         — label to scan for (default: ai-ralph)
+#   RALPH_MAX_ITERATIONS — max loop iterations per issue (default: 12)
+#   MAIN_BRANCH          — target branch for MRs (default: main)
 ##############################################################################
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
 
 stages:
   - autonomous-development
@@ -25,20 +42,11 @@ variables:
   TARGET_LABEL:         "ai-ralph"
   BRANCH_PREFIX:        "ai/ralph"
   RALPH_MAX_ITERATIONS: "12"
+  MAIN_BRANCH:          "main"
+  ISSUE_IID:            ""
 
-nightly-ralph:
+ralph:
   stage: autonomous-development
-
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-
-  artifacts:
-    name: "ralph-${CI_JOB_ID}"
-    paths:
-      - artifacts/
-    when: always
-    expire_in: 30 days
 
   script:
     - |
@@ -51,11 +59,20 @@ nightly-ralph:
         "https://oauth2:${PROJECT_BOT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       mkdir -p artifacts
 
-      # ── 1. Fetch open issues ──────────────────────────────────────────────────
-      echo "==> Fetching issues labelled '${TARGET_LABEL}' ..."
-      ISSUES_JSON=$(curl -fsSL \
-        --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues?labels=${TARGET_LABEL}&state=opened&per_page=20")
+      # ── 1. Fetch issues ───────────────────────────────────────────────────────
+      if [ -n "${ISSUE_IID}" ]; then
+        echo "==> Running on single issue #${ISSUE_IID} ..."
+        SINGLE=$(curl -fsSL \
+          --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues/${ISSUE_IID}")
+        ISSUES_JSON="[${SINGLE}]"
+      else
+        echo "==> Fetching issues labelled '${TARGET_LABEL}' ..."
+        ISSUES_JSON=$(curl -fsSL \
+          --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues?labels=${TARGET_LABEL}&state=opened&per_page=20")
+      fi
+
       ISSUE_COUNT=$(echo "${ISSUES_JSON}" | jq 'length')
       echo "    Found ${ISSUE_COUNT} issue(s)"
       [[ "${ISSUE_COUNT}" -eq 0 ]] && echo "==> Nothing to do." && exit 0
@@ -83,10 +100,10 @@ nightly-ralph:
         echo "════════════════════════════════════════════════"
 
         # ── Clean repo and create branch ─────────────────────────────────────
-        git fetch origin main --quiet
-        git checkout main --quiet
-        git pull origin main --quiet
-        git clean -fdx --exclude=artifacts/
+        git fetch origin "${MAIN_BRANCH}" --quiet
+        git checkout "${MAIN_BRANCH}" --quiet
+        git pull origin "${MAIN_BRANCH}" --quiet
+        git clean -fdx -e artifacts/
 
         if git ls-remote --exit-code --heads origin "${BRANCH}" > /dev/null 2>&1; then
           echo "WARN: Branch '${BRANCH}' already exists — skipping"
@@ -98,41 +115,42 @@ nightly-ralph:
         mkdir -p .ralph
 
         # ── Step 1: Generate PRD ──────────────────────────────────────────────
-        echo "==> [1/3] Generating PRD ..."
+        echo "==> [1/4] Generating PRD ..."
         PRD_PROMPT=$(printf '@prd Issue #%s: %s\n\n%s' "${IID}" "${TITLE}" "${BODY}")
         opencode run "${PRD_PROMPT}" --dangerously-skip-permissions \
           2>&1 | tee "${ARTIFACT_DIR}/step1-prd.log" || true
 
         if [ ! -f ".ralph/prd.md" ]; then
           printf 'STATUS: ERROR\nREASON: .ralph/prd.md not generated\n' > "${ARTIFACT_DIR}/result.txt"
-          git checkout main --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
+          git checkout "${MAIN_BRANCH}" --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
           rm -rf .ralph/ && continue
         fi
 
         # ── Step 2: Convert PRD to prd.json ──────────────────────────────────
-        echo "==> [2/3] Converting PRD to prd.json ..."
+        echo "==> [2/4] Converting PRD to prd.json ..."
         opencode run "@ralph-converter" --dangerously-skip-permissions \
           2>&1 | tee "${ARTIFACT_DIR}/step2-converter.log" || true
 
         if [ ! -f ".ralph/prd.json" ]; then
           printf 'STATUS: ERROR\nREASON: .ralph/prd.json not generated\n' > "${ARTIFACT_DIR}/result.txt"
-          git checkout main --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
+          git checkout "${MAIN_BRANCH}" --quiet && git branch -D "${BRANCH}" 2>/dev/null || true
           rm -rf .ralph/ && continue
         fi
 
         # ── Step 3: Run ralph loop ────────────────────────────────────────────
-        echo "==> [3/3] Running ralph (max ${RALPH_MAX_ITERATIONS} iterations) ..."
+        echo "==> [3/4] Running ralph (max ${RALPH_MAX_ITERATIONS} iterations) ..."
         ralph "${RALPH_MAX_ITERATIONS}" 2>&1 | tee "${ARTIFACT_DIR}/step3-ralph.log" || true
 
         # ── Collect git artifacts ─────────────────────────────────────────────
-        git diff  main...HEAD          > "${ARTIFACT_DIR}/changes.diff"   2>/dev/null || true
-        git diff  main...HEAD --stat   > "${ARTIFACT_DIR}/changes.stat"   2>/dev/null || true
-        git log   main...HEAD --oneline > "${ARTIFACT_DIR}/commits.txt"   2>/dev/null || true
+        git diff  "${MAIN_BRANCH}...HEAD"          > "${ARTIFACT_DIR}/changes.diff"  2>/dev/null || true
+        git diff  "${MAIN_BRANCH}...HEAD" --stat   > "${ARTIFACT_DIR}/changes.stat"  2>/dev/null || true
+        git log   "${MAIN_BRANCH}...HEAD" --oneline > "${ARTIFACT_DIR}/commits.txt"  2>/dev/null || true
 
         # ── Signal detection ──────────────────────────────────────────────────
         if grep -q '<promise>COMPLETE</promise>' "${ARTIFACT_DIR}/step3-ralph.log"; then
-          echo "==> COMPLETE — generating MR description ..."
 
+          # ── Step 4: Generate MR description ────────────────────────────────
+          echo "==> [4/4] Generating MR description ..."
           opencode run "@reporter" --dangerously-skip-permissions \
             2>&1 | tee "${ARTIFACT_DIR}/step4-reporter.log" || true
 
@@ -149,10 +167,11 @@ nightly-ralph:
               --header "PRIVATE-TOKEN: ${PROJECT_BOT_TOKEN}" \
               --header "Content-Type: application/json" \
               --data "$(jq -n \
-                --arg src   "${BRANCH}" \
-                --arg title "feat(#${IID}): ${TITLE}" \
-                --arg desc  "${MR_BODY}" \
-                '{source_branch:$src,target_branch:"main",title:$title,description:$desc,remove_source_branch:true,squash:false,labels:"ai-generated"}')" \
+                --arg src    "${BRANCH}" \
+                --arg target "${MAIN_BRANCH}" \
+                --arg title  "feat(#${IID}): ${TITLE}" \
+                --arg desc   "${MR_BODY}" \
+                '{source_branch:$src,target_branch:$target,title:$title,description:$desc,remove_source_branch:true,squash:false,labels:"ai-generated"}')" \
               "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests")
 
             MR_URL=$(echo "${MR_RESPONSE}" | jq -r '.web_url // "unknown"')
@@ -178,7 +197,7 @@ nightly-ralph:
         # ── Copy .ralph/ to artifacts then clean ──────────────────────────────
         cp -r .ralph/. "${ARTIFACT_DIR}/ralph/" 2>/dev/null || true
         rm -rf .ralph/
-        git checkout main --quiet
+        git checkout "${MAIN_BRANCH}" --quiet
         git branch -D "${BRANCH}" 2>/dev/null || true
         echo "==> Done issue #${IID}"
 
@@ -203,3 +222,10 @@ nightly-ralph:
       done
       echo " Artifacts: ${CI_JOB_URL}/artifacts"
       echo "════════════════════════════════════════════════"
+
+  artifacts:
+    name: "ralph-${CI_JOB_ID}"
+    paths:
+      - artifacts/
+    when: always
+    expire_in: 30 days

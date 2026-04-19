@@ -1,11 +1,19 @@
 # Opencode-Ralph
 
-Ralph is an autonomous AI agent loop built on [OpenCode](https://opencode.ai). It runs inside a Docker image and executes PRD user stories one at a time — each iteration is a fresh OpenCode instance with clean context. Memory persists via git history, `progress.txt`, and `prd.json`.
+Ralph is an autonomous AI agent loop built on [OpenCode](https://opencode.ai). It runs inside a Docker image and executes PRD user stories one at a time — each iteration is a fresh OpenCode instance with clean context. Memory persists via git history, `.ralph/progress.txt`, and `.ralph/prd.json`.
 
 ## How It Works
 
 ```
-prd.json  →  ralph (loop)  →  commits on feature branch
+issue description
+      ↓
+   @prd  →  .ralph/prd.md
+      ↓
+@ralph-converter  →  .ralph/prd.json
+      ↓
+   ralph (loop)  →  commits on feature branch
+      ↓
+  @reporter  →  .ralph/mr.md  →  MR
 ```
 
 Each iteration Ralph:
@@ -59,15 +67,16 @@ The image bakes in:
 - `ralph` binary at `/usr/local/bin/ralph` (globally available)
 - Ralph prompt template at `/usr/local/share/ralph/prompt.md`
 
-Environment variables set at build time:
+Environment variables:
 
 | Variable          | Default                             | Purpose                                                |
 | ----------------- | ----------------------------------- | ------------------------------------------------------ |
 | `RALPH_HOME`      | `/usr/local/share/ralph`            | Directory containing `prompt.md`                       |
 | `RALPH_DATA_DIR`  | `$PWD`                              | Project root                                           |
-| `RALPH_DIR`       | `$RALPH_DATA_DIR/.ralph`            | Where `.ralph/prd.json`, `progress.txt`, archives live |
+| `RALPH_DIR`       | `$RALPH_DATA_DIR/.ralph`            | Where `prd.json`, `progress.txt`, archives live        |
 | `VLLM_API_URL`    | `http://ai-server.internal:8000/v1` | vLLM endpoint                                          |
 | `VLLM_MODEL_NAME` | `codestral-22b`                     | Model to use                                           |
+| `VLLM_API_KEY`    | `local-secret`                      | API key for the vLLM endpoint                          |
 
 Build the image:
 
@@ -81,16 +90,17 @@ Run against a local project:
 docker run --rm \
   -v $(pwd):/workspace \
   -e VLLM_API_URL=http://your-server:8000/v1 \
+  -e VLLM_API_KEY=your-key \
   ralph ralph 10
 ```
 
 ## GitLab CI
 
-The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-fix`:
+The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-ralph`:
 
 1. Fetches open issues with the target label
 2. Creates a branch per issue (`ai/ralph-<iid>-<title>`)
-3. Calls `ralph` — the loop works on the issue description
+3. Runs the full chain: `@prd` → `@ralph-converter` → `ralph` → `@reporter`
 4. On `<promise>COMPLETE</promise>` → commits, opens an MR
 5. On max iterations reached without COMPLETE → logs INCOMPLETE in artifacts
 
@@ -101,7 +111,8 @@ The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-fix`:
 | `ralph-scripts/ralph.sh`             | The bash loop that spawns fresh OpenCode instances           |
 | `ralph-scripts/prompt.md`            | Instructions given to each OpenCode instance                 |
 | `opencode/agents/prd.md`             | Agent for generating PRDs (`@prd`)                           |
-| `opencode/agents/ralph-converter.md` | Agent for converting PRDs to `prd.json` (`@ralph-converter`) |
+| `opencode/agents/ralph-converter.md` | Agent for converting PRDs to `.ralph/prd.json` (`@ralph-converter`) |
+| `opencode/agents/reporter.md`        | Agent for generating MR descriptions (`@reporter`)           |
 | `opencode/commands/prd.md`           | Command for generating PRDs (`/prd`)                         |
 | `opencode/commands/ralph.md`         | Command for converting PRDs (`/ralph`)                       |
 | `opencode/skills/ralph/SKILL.md`     | Skill with ralph conversion logic                            |
@@ -114,8 +125,8 @@ The `.gitlab-ci.yml` runs Ralph nightly on issues labelled `ai-fix`:
 
 Each iteration spawns a **new OpenCode instance** with no memory of previous work. The only continuity between iterations is:
 - Git history (commits from previous iterations)
-- `progress.txt` (learnings and codebase patterns)
-- `prd.json` (which stories are done)
+- `.ralph/progress.txt` (learnings and codebase patterns)
+- `.ralph/prd.json` (which stories are done)
 
 ### Story Size
 

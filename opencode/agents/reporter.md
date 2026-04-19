@@ -30,7 +30,7 @@ Write `.ralph/mr.md` — a GitLab Merge Request description — from the availab
 1. `.ralph/prd.md` — original requirements (the problem statement)
 2. `.ralph/prd.json` — user stories and their `passes` status
 3. `.ralph/progress.txt` — iteration learnings and patterns discovered
-4. `git diff --stat HEAD~1..HEAD` (or `main...HEAD`) — files changed
+4. Run `git diff ${MAIN_BRANCH:-main}...HEAD` — files changed
 
 ## Output Format
 
@@ -62,7 +62,7 @@ Write exactly this structure to `.ralph/mr.md`:
 
 ## 📁 Files Changed
 
-[Output of `git diff --stat main...HEAD` verbatim, in a code block]
+[Output of `git diff ${MAIN_BRANCH:-main}...HEAD` verbatim, in a code block]
 
 ## 💡 Notes
 
@@ -75,5 +75,5 @@ Write exactly this structure to `.ralph/mr.md`:
 - Strict Markdown only — no conversational text
 - Pull facts from the artifacts; do not invent
 - If a section has no content, write `_Nothing to report._`
-- `git diff --stat` goes verbatim in a fenced code block — do not summarize it
+- `git diff ${MAIN_BRANCH:-main}...HEAD` output goes verbatim in a fenced code block — do not summarize it
 - Stories list must reflect the actual `passes` values from `.ralph/prd.json`
