@@ -26,7 +26,7 @@ Converts existing PRDs to the prd.json format that OpenRalph uses for autonomous
 
 ## The Job
 
-Take a PRD (markdown file or text) and convert it to `prd.json` in your ralph directory.
+Take `.ralph/prd.md` and convert it to `.ralph/prd.json`.
 
 ---
 
@@ -251,9 +251,9 @@ Add ability to mark tasks with different statuses.
 1. Read the current `prd.json` if it exists
 2. Check if `branchName` differs from the new feature's branch name
 3. If different AND `progress.txt` has content beyond the header:
-   - Create archive folder: `archive/YYYY-MM-DD-feature-name/`
-   - Copy current `prd.json` and `progress.txt` to archive
-   - Reset `progress.txt` with fresh header
+   - Create archive folder: `.ralph/archive/YYYY-MM-DD-feature-name/`
+   - Copy current `.ralph/prd.json` and `.ralph/progress.txt` to archive
+   - Reset `.ralph/progress.txt` with fresh header
 
 **The ralph.sh script handles this automatically** when you run it, but if you are manually updating prd.json between runs, archive first.
 
@@ -263,7 +263,7 @@ Add ability to mark tasks with different statuses.
 
 Before writing prd.json, verify:
 
-- [ ] **Previous run archived** (if prd.json exists with different branchName, archive it first)
+- [ ] **Previous run archived** (if `.ralph/prd.json` exists with different branchName, archive it first)
 - [ ] Each story is completable in one iteration (small enough)
 - [ ] Stories are ordered by dependency (schema to backend to UI)
 - [ ] Every story has "Typecheck passes" as criterion

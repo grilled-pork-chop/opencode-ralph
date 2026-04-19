@@ -28,7 +28,7 @@ Create detailed Product Requirements Documents that are clear, actionable, and s
 
 1. Receive a feature description
 2. Generate a structured PRD directly from the input — no clarifying questions
-3. Save to `tasks/prd-[feature-name].md`
+3. Save to `.ralph/prd.md`
 
 **Important:** Do NOT start implementing. Just create the PRD.
 
@@ -113,8 +113,8 @@ The PRD reader may be a junior developer or AI agent. Therefore:
 ## Output
 
 - **Format:** Markdown (`.md`)
-- **Location:** `tasks/`
-- **Filename:** `prd-[feature-name].md` (kebab-case)
+- **Location:** `.ralph/`
+- **Filename:** `prd.md`
 
 ---
 
@@ -214,4 +214,4 @@ Before saving the PRD:
 - [ ] User stories are small and specific
 - [ ] Functional requirements are numbered and unambiguous
 - [ ] Non-goals section defines clear boundaries
-- [ ] Saved to `tasks/prd-[feature-name].md`
+- [ ] Saved to `.ralph/prd.md`

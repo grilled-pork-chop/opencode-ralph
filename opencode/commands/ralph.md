@@ -1,7 +1,7 @@
 ---
-description: Convert a PRD markdown file to prd.json for Ralph autonomous execution. Usage: /ralph <path-to-prd.md>
+description: Convert .ralph/prd.md to .ralph/prd.json for Ralph autonomous execution. Usage: /ralph
 ---
 
-Convert the following PRD file to prd.json: $ARGUMENTS
+Read `.ralph/prd.md` and convert it to `.ralph/prd.json`.
 
-Use the ralph skill to parse the PRD and write `prd.json` in the ralph scripts directory.
+Use the ralph skill to parse the PRD and write `.ralph/prd.json`.

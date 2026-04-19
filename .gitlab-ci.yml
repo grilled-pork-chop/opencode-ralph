@@ -21,7 +21,7 @@ default:
 variables:
   VLLM_API_URL:         "http://ai-server.internal:8000"
   VLLM_MODEL_NAME:      "codestral-22b"
-  TARGET_LABEL:         "ai-fix"
+  TARGET_LABEL:         "ai-ralph"
   BRANCH_PREFIX:        "ai/ralph"
   RALPH_MAX_ITERATIONS: "12"
 

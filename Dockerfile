@@ -13,7 +13,8 @@ ENV NODE_ENV=production \
     NODE_PATH=${OP_CACHE}/node_modules \
     VLLM_API_URL=http://ai-server.internal:8000/v1 \
     VLLM_MODEL_NAME=codestral-22b \
-    TARGET_LABEL=ai-fix
+    TARGET_LABEL=ai-ralph \
+    RALPH_HOME=/usr/local/share/ralph
 
 # ── System tools ─────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -33,6 +34,12 @@ COPY opencode/ ${OP_CONFIG}/
 
 # Copy metadata and configuration
 COPY vendor/ ${OP_CACHE}/
+
+# ── Ralph CLI ────────────────────────────────────────────────────────────────
+RUN mkdir -p /usr/local/share/ralph
+COPY ralph-scripts/prompt.md /usr/local/share/ralph/prompt.md
+COPY ralph-scripts/ralph.sh /usr/local/bin/ralph
+RUN chmod +x /usr/local/bin/ralph
 
 # ── Execution ────────────────────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

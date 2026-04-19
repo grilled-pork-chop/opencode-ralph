@@ -4,4 +4,4 @@ description: Generate a Product Requirements Document. Usage: /prd <feature desc
 
 Generate a PRD for the following feature: $ARGUMENTS
 
-Use the prd skill to produce the full document and save it to `tasks/prd-[feature-name].md`.
+Use the prd skill to produce the full document and save it to `.ralph/prd.md`.
